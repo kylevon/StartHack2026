@@ -623,7 +623,8 @@ function renderCenter(force) {
   $('viewbar').hidden = !issue;
   $('tab-decision').className = view === 'decision' ? 'on' : '';
   $('tab-history').className = view === 'history' ? 'on' : '';
-  $('hist-count').textContent = issue ? issue.history.length + issue.replies : '';
+  // once the timeline is loaded, count what it actually shows (emails included); until then, what Faro itself recorded
+  $('hist-count').textContent = !issue ? '' : historyData && historyData.id === issue.id ? historyData.entries.length : issue.history.length + issue.replies;
   if (!force && key === shownKey) return;   // leave a note field alone while it is being typed in
   const place = view + (issue ? issue.id : '');
   const keep = place === shownPlace ? $('center').scrollTop : 0;   // same issue, same tab: stay where the reader was
