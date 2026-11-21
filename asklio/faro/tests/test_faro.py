@@ -749,3 +749,26 @@ async def test_an_enabled_adapter_posts_corrections_and_tracks_them(folder, tmp_
 
     again = Hub(folder, tmp_path / "state")
     assert again.settings()["adapters"][0]["enabled"] and all(c["applied_at"] for c in again.store.corrections())
+
+
+async def test_an_outside_step_names_its_owner_and_the_team_can_mark_it_done(folder, tmp_path):
+    from faro.tools import make_tools
+
+    hub = Hub(folder, tmp_path / "state")
+    tools = {t.name: t for t in make_tools(hub)}
+    await tools["open_issue"].ainvoke({"title": "Art books short", "severity": "blocker", "summary": "s", "evidence": [],
+                                       "next_step": "Paul Winter to send the order confirmation to Karton Nowak.", "next_owner": "Paul Winter"})
+    issue = hub.issues["I-1"]
+    assert issue.next_owner == "Paul Winter"
+    await tools["update_issue"].ainvoke({"issue_id": "I-1", "note": "Truck still unconfirmed.", "next_step": "Raj Patel to book our own carrier.", "next_owner": "Raj Patel"})
+    assert issue.next_owner == "Raj Patel"
+
+    hub.step_done("I-1")
+    assert issue.next_step == "" and issue.next_owner == "" and issue.history[-1] == issue.history[-1] | {"kind": "step_done", "text": "Raj Patel to book our own carrier."}
+    assert hub.inbox[-1].startswith("[log]") and "as done by Raj Patel" in hub.inbox[-1]
+    with pytest.raises(ValueError):
+        hub.step_done("I-1")  # nothing is waiting any more
+
+    await tools["update_issue"].ainvoke({"issue_id": "I-1", "note": "All arrived.", "next_step": "none", "next_owner": "Paul Winter"})
+    assert issue.next_owner == ""  # no step, so nobody to wait on
+    assert Hub(folder, tmp_path / "state").issues["I-1"].history[-2]["kind"] == "step_done"

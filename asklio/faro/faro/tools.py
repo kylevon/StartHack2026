@@ -25,6 +25,7 @@ class OpenIssue(BaseModel):
     summary: str = Field(description="For a reader with no context: what you found and what it costs if ignored. A few sentences.")
     evidence: list[str] = Field(description="Paths of the files you read that back this up, the most telling one first.")
     next_step: str = Field(default="", description="What someone has to do outside this system, and who: for example a named person who has to make a phone call or book a truck. One or two short sentences. Leave empty when nothing of that kind is needed. Do not mention your proposals here: a proposal waiting for approval is shown on its own, and one you no longer want you take back with withdraw_proposal.")
+    next_owner: str = Field(default="", description="Who has to do that next step: one person's name, or two joined by 'and'. Shown on the issue as who it is waiting on. Empty when there is no next step.")
 
 
 class UpdateIssue(BaseModel):
@@ -32,6 +33,7 @@ class UpdateIssue(BaseModel):
     note: str = Field(description="What happened or what you learned, in one or two sentences. It becomes an entry in the issue's history.")
     summary: str = Field(default="", description="A new summary, only when your understanding of the problem has changed.")
     next_step: str | None = Field(default=None, description="The new next step, as in open_issue: only what someone has to do outside this system, never an instruction to approve or reject a proposal. 'none' when nothing of that kind is left. Omit to leave it unchanged.")
+    next_owner: str | None = Field(default=None, description="Who has to do the new next step, as in open_issue. Give it whenever you give next_step.")
     status: Literal["open", "resolved"] | None = Field(default=None, description="'resolved' once the problem is dealt with or turned out to be nothing.")
     severity: Severity | None = Field(default=None, description="Only when it has become more or less serious.")
     evidence: list[str] = Field(default_factory=list, description="Further file paths to add.")

@@ -121,6 +121,17 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
         app.state.hub.chat(body.text.strip())
         return {"ok": True}
 
+    @app.post("/api/issues/{issue_id}/done")
+    async def done(issue_id: str):
+        hub: Hub = app.state.hub
+        if issue_id not in hub.issues:
+            raise HTTPException(404, f"No issue {issue_id}.")
+        try:
+            hub.step_done(issue_id)
+        except ValueError as err:
+            raise HTTPException(409, str(err)) from None
+        return {"ok": True}
+
     @app.post("/api/issues/{issue_id}/log")
     async def log(issue_id: str, body: NoteIn):
         hub: Hub = app.state.hub

@@ -25,6 +25,7 @@ class Issue:
     summary: str  # why it matters, kept current
     evidence: list[str]
     next_step: str = ""  # what has to happen next that no pending approval or awaited reply already covers; "" when nothing
+    next_owner: str = ""  # who has to do that step
     status: str = "open"  # open | resolved
     thread_ids: list[str] = field(default_factory=list)  # mail conversations that belong to this issue
     replies: int = 0  # incoming messages seen in those conversations; the messages are read from the mailbox
@@ -146,6 +147,18 @@ class Hub:
         for change in changes:
             self.store.add_correction(approval.id, approval.issue_id, approval.args.get("system", ""), approval.args.get("record", ""), change["field"], change.get("old_value", ""), change["new_value"])
 
+    def step_done(self, issue_id: str) -> Issue:
+        """The team says the step that had to happen outside Faro has happened. Faro cannot see that for itself."""
+        issue = self.issues[issue_id]
+        if not issue.next_step:
+            raise ValueError("This issue has no step waiting outside Faro.")
+        step, who = issue.next_step, issue.next_owner
+        issue.next_step, issue.next_owner = "", ""
+        self._log(issue, "step_done", step)
+        self.inject(f"[log] The team marked this step on issue {issue.id} ({issue.title}) as done{' by ' + who if who else ''}: \"{step}\". "
+                    "Take it as having happened. Set a new next step only if something further is needed outside this system.")
+        return issue
+
     def log_manual(self, issue_id: str, text: str) -> Issue:
         """Something that happened outside Faro and outside the mailbox: a call, a meeting, a decision someone took."""
         issue = self.issues[issue_id]
@@ -182,19 +195,22 @@ class Hub:
         self.inject(f"[log] The team has now made this correction in {correction['system']} itself: {what} (issue {issue.id}).")
         return correction
 
-    def open_issue(self, title: str, severity: str, summary: str, evidence: list[str], next_step: str = "") -> Issue:
-        issue = Issue(f"I-{len(self.issues) + 1}", title, severity, summary, evidence, next_step)
+    def open_issue(self, title: str, severity: str, summary: str, evidence: list[str], next_step: str = "", next_owner: str = "") -> Issue:
+        issue = Issue(f"I-{len(self.issues) + 1}", title, severity, summary, evidence, next_step, next_owner if next_step else "")
         self.issues[issue.id] = issue
         self._log(issue, "found", summary)
         return issue
 
     def update_issue(self, issue_id: str, note: str, summary: str = "", next_step: str | None = None, status: str | None = None,
-                     evidence: list[str] | None = None, thread_id: str = "", severity: str | None = None) -> Issue:
+                     evidence: list[str] | None = None, thread_id: str = "", severity: str | None = None, next_owner: str | None = None) -> Issue:
         issue = self.issues[issue_id]
         if summary:
             issue.summary = summary
         if next_step is not None:
             issue.next_step = "" if next_step.strip().lower() in ("", "none") else next_step.strip()
+            issue.next_owner = (next_owner or "").strip() if issue.next_step else ""
+        elif next_owner is not None:
+            issue.next_owner = next_owner.strip() if issue.next_step else ""
         if severity:
             issue.severity = severity
         for path in evidence or []:

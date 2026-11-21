@@ -79,15 +79,21 @@ a{color:var(--accent)}
 .brand{padding:0 2px 4px}
 .brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
 .brand span{font-size:13px;color:var(--muted)}
-.ap{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
+.ap{display:block;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
 .ap.on{box-shadow:var(--pressed)}
 .ap b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:15px;font-weight:600;letter-spacing:-.01em;line-height:1.3;overflow-wrap:anywhere}
 .ap .why{display:block;font-size:13px;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
 .st{display:block;font-size:12px;font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-pending{color:var(--accent)} .st-rejected{color:var(--ink)} .st-approved{color:var(--ok)}
+.st{color:var(--muted);font-weight:500}
+.st-you{color:var(--accent);font-weight:600}
+.risk{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px}
+.risk-blocker{color:var(--ink)} .risk-risk{color:var(--muted)} .risk-info{color:var(--muted);font-weight:500;opacity:.75}
+.grp{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 4px 0;margin-bottom:-6px}
+.grp.you{color:var(--accent)}
+.grp span{font-weight:600;letter-spacing:0}
 .dot{width:10px;height:10px;border-radius:50%;margin-top:6px}
 .dot-blocker{background:var(--bad)} .dot-risk{background:#e08a00} .dot-info{background:var(--muted)}
-.ap.done{opacity:.6}
+.ap.done{opacity:.62}
 .hint{font-size:13px;color:var(--muted);padding:0 6px}
 
 .center{overflow:auto;min-width:0}
@@ -363,26 +369,49 @@ function kind(a) {
 const of = (issue) => [...approvals.values()].filter((a) => a.issue_id === issue.id);
 const pendingOf = (issue) => of(issue).filter((a) => a.status === 'pending');
 const awaiting = (issue) => issue.thread_ids.length > 0 && issue.replies === 0;
+// Who an outside step is waiting on: the name the agent gave, or for older issues the first name it put in bold.
+function owner(issue) {
+  if (issue.next_owner) return issue.next_owner;
+  const names = [...String(issue.next_step || '').matchAll(/\*\*([^*]+)\*\*/g)].map((m) => m[1].trim()).filter((n) => /^[A-Za-zÀ-ž.' -]{3,40}$/.test(n) && /^[A-ZÀ-Ž]/.test(n) && n.split(' ').length <= 4);
+  return names[0] || '';
+}
 
-// What the card says is next, most pressing first.
-function nextLine(issue) {
-  const n = pendingOf(issue).length;
-  if (issue.status === 'resolved') return ['Resolved', 'approved'];
-  if (n) return [n === 1 ? 'Your approval needed' : n + ' approvals needed', 'pending'];
-  if (issue.next_step) return ['Action required', 'rejected'];   // who and what is on the Decision page
-  if (awaiting(issue)) return ['Waiting for a reply', 'approved'];
-  return ['No action needed', 'approved'];
+// Two different things, shown in two different places.
+// Action: who has to do something next. It decides the group a card sits in, and the groups are ordered by how much they need you.
+// Risk: how bad the problem is. It is the small word on the card, and orders the cards inside a group.
+const GROUPS = ['Needs your approval', 'Waiting on someone else', 'Waiting for a reply', 'Nothing to do', 'Resolved'];
+const RISK = { blocker: 0, risk: 1, info: 2 };
+function groupOf(issue) {
+  if (issue.status === 'resolved') return 4;
+  if (pendingOf(issue).length) return 0;
+  if (issue.next_step) return 1;
+  if (awaiting(issue)) return 2;
+  return 3;
+}
+// The one line under the title: the specifics of what its group already says.
+function detail(issue) {
+  const waiting = pendingOf(issue);
+  if (issue.status === 'resolved') return '';
+  if (waiting.length) return waiting.length === 1 ? bare(waiting[0].headline) : waiting.length + ' approvals';
+  if (issue.next_step) return owner(issue) || 'Someone outside Faro';
+  return '';
 }
 
 /* ---------- left: issues ---------- */
 function renderLeft() {
-  const rank = (i) => i.status === 'resolved' ? 3 : pendingOf(i).length ? 0 : i.next_step ? 1 : 2;
-  const list = [...issues.values()].sort((a, b) => rank(a) - rank(b));
+  const list = [...issues.values()].sort((a, b) => groupOf(a) - groupOf(b) || RISK[a.severity] - RISK[b.severity] || b.updated - a.updated);
   const waiting = [...approvals.values()].filter((a) => a.status === 'pending').length;
-  $('left').innerHTML = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
-    (list.length ? list.map((i) => { const [text, tone] = nextLine(i); return '<button class="ap ' + (i.id === selected ? 'on ' : '') + (rank(i) === 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(i.title) + '">' +
-      '<span class="dot dot-' + esc(i.severity) + '"></span><span><b>' + esc(bare(i.title)) + '</b><span class="st st-' + tone + '">' + esc(text) + '</span></span></button>'; }).join('')
-      : '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>');
+  let html = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>';
+  if (!list.length) html += '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>';
+  let current = -1;
+  for (const i of list) {
+    const g = groupOf(i);
+    if (g !== current) { current = g; html += '<div class="grp' + (g === 0 ? ' you' : '') + '">' + GROUPS[g] + '<span>' + list.filter((x) => groupOf(x) === g).length + '</span></div>'; }
+    const line = detail(i);
+    html += '<button class="ap ' + (i.id === selected ? 'on ' : '') + (g >= 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(bare(i.title)) + '">' +
+      '<span class="risk risk-' + esc(i.severity) + '">' + esc(i.severity) + '</span><b>' + esc(bare(i.title)) + '</b>' + (line ? '<span class="st' + (g === 0 ? ' st-you' : '') + '">' + esc(line) + '</span>' : '') + '</button>';
+  }
+  $('left').innerHTML = html;
 }
 
 const ICON = {
@@ -479,7 +508,8 @@ function nextAction(issue) {
   const card = (label, body, cap, quiet) => '<div class="next' + (quiet ? ' quiet' : '') + '"><div><div class="sevline sev-info">' + label + '</div><div class="reason rich next-text">' + body + '</div></div><p class="cap">' + cap + '</p></div>';
   let other = '';
   if (issue.status === 'resolved') other = card('Nothing to do', 'This issue is resolved.', 'It stays here with its history.', true);
-  else if (issue.next_step) other = card('Outside Faro', rich(issue.next_step), 'Someone has to do this themselves. The agent updates it when something changes.');
+  else if (issue.next_step) other = card('Outside Faro' + (owner(issue) ? ' · waiting on ' + esc(owner(issue)) : ''), rich(issue.next_step),
+    'Faro cannot see this happen. Tell it when it has. <button class="btn" style="padding:5px 14px;font-size:12.5px;margin-left:8px" data-done="' + issue.id + '">Mark as done</button>');
   else if (!waiting.length && awaiting(issue)) other = card('Waiting for a reply', 'An email is out and has not been answered yet.', 'Nothing for you to do. The reply will appear in History and the agent will pick it up.', true);
   else if (!waiting.length) other = card('Nothing to do', 'No action is needed right now.', 'The agent will raise one here if that changes.', true);
   return cards + other;
@@ -538,6 +568,7 @@ async function loadEvidence(path) {
 const WHAT = {
   found: ['Agent', 'found this', 'agent'], note: ['Agent', 'noted', 'agent'], proposed: ['Agent', 'proposed', 'agent'], resolved: ['Agent', 'resolved it', 'done'], reopened: ['Agent', 'reopened it', 'agent'],
   auto_approved: ['Auto mode', 'approved', 'auto'], auto_sent: ['Auto mode', 'approved and sent', 'auto'],
+  step_done: ['You', 'marked the outside step as done', 'you'],
   logged: ['You', 'recorded', 'you'], applied: ['You', 'changed it in the system', 'you'],
   reconciled: ['You', 'reconciled it with the system', 'you'], auto_reconciled: ['Adapter', 'posted the correction', 'auto'],
   withdrawn: ['Agent', 'withdrew its proposal', 'agent'],
@@ -718,6 +749,7 @@ document.addEventListener('click', (e) => {
   if ((el = t('[data-sheet]'))) { sheetOpen.set(el.dataset.path, Number(el.dataset.sheet)); loadEvidence(el.dataset.path); return; }
   if ((el = t('[data-expand]'))) { const k = el.dataset.expand; if (expanded.has(k)) expanded.delete(k); else expanded.add(k); renderCenter(true); return; }
   if ((el = t('[data-msg]'))) { msgLang.set(el.dataset.msg, el.dataset.to); renderCenter(true); return; }
+  if ((el = t('[data-done]'))) { el.disabled = true; post('/api/issues/' + el.dataset.done + '/done', {}); return; }
   if ((el = t('[data-reconcile]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.reconcile + '/reconcile', {}); return; }
   if ((el = t('[data-applied]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.applied + '/applied', { text: '' }); return; }
   if ((el = t('[data-decide]'))) { el.disabled = true; const note = $('note-' + el.dataset.id); post('/api/approvals/' + el.dataset.id, { approved: el.dataset.decide === '1', note: note ? note.value : '' }); return; }
