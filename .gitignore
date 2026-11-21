@@ -1,0 +1,6 @@
+# Local secrets and Dockside runtime state
+.env.local
+.venv/
+__pycache__/
+.pytest_cache/
+/asklio/dockside/.dockside/

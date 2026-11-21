@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>Dockside</title>
+<style>
+/* Three parts on one soft surface. Only two things are raised: the approval cards on the left and the chat panel on the right. Everything inside them, and the whole centre, is flat. Light only. */
+:root{
+  color-scheme:only light;
+  --bg:#f1f3f6; --hi:#ffffff; --lo:#dde2e9;
+  --ink:#1d1d1f; --ink-2:#3a3a3f; --muted:#66666c; --hair:rgba(29,29,31,.1); --sheet:rgba(255,255,255,.6);
+  --accent:#0071e3; --accent-ink:#ffffff;
+  --bad:#c9001a; --warn:#a04a00; --ok:#1d7a36;
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --raised:5px 5px 14px var(--lo),-5px -5px 14px var(--hi);
+  --raised-sm:3px 3px 7px var(--lo),-3px -3px 7px var(--hi);
+  --pressed:inset 3px 3px 7px var(--lo),inset -3px -3px 7px var(--hi);
+}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box;scrollbar-width:none}
+*::-webkit-scrollbar{display:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+h1,h2,h3,p{margin:0}
+a{color:var(--accent)}
+
+.app{display:grid;grid-template-columns:360px minmax(0,1fr) 368px;height:100%;padding:0 16px}
+
+.left{overflow:auto;padding:26px 16px 26px 12px;display:flex;flex-direction:column;gap:18px}
+.brand{padding:0 6px 4px}
+.brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
+.brand span{font-size:13px;color:var(--muted)}
+.ap{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
+.ap.on{box-shadow:var(--pressed)}
+.ap b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ap .why{display:block;font-size:13px;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
+.st{display:block;font-size:12px;font-weight:600;margin-top:7px}
+.st-pending{color:var(--accent)} .st-rejected{color:var(--bad)} .st-approved{color:var(--ok)}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:6px}
+.dot-blocker{background:var(--bad)} .dot-risk{background:#e08a00} .dot-info{background:var(--muted)}
+.ap.done{opacity:.6}
+.hint{font-size:13px;color:var(--muted);padding:0 6px}
+
+.center{overflow:auto;min-width:0}
+.detail{max-width:760px;margin:0 auto;padding:40px 28px 80px;display:flex;flex-direction:column;gap:30px}
+.sevline{font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.sev-blocker{color:var(--bad)} .sev-risk{color:var(--warn)} .sev-info{color:var(--muted)}
+h1{font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.15;text-wrap:balance;margin-top:6px}
+h2{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.found{font-size:15.5px;color:var(--ink-2);max-width:65ch;white-space:pre-wrap;overflow-wrap:anywhere}
+.evidence{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.evidence a{overflow-wrap:anywhere}
+.evidence img{max-width:min(420px,100%);border-radius:16px;display:block;margin-top:10px}
+.quote{background:var(--sheet);border-radius:16px;padding:16px;font-family:var(--mono);font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.cap{font-size:12.5px;color:var(--muted)}
+.label{font-size:12.5px;color:var(--muted);margin:14px 0 6px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:10px 12px 10px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-size:12px;font-weight:600;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+.letter{background:var(--sheet);border-radius:18px;padding:18px 20px}
+.letter-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.letter-top span{overflow-wrap:anywhere;min-width:0}
+.subject{font-weight:600;margin-top:12px;overflow-wrap:anywhere}
+.body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;color:var(--ink-2);margin-top:8px}
+.seg{display:inline-flex;gap:2px;background:rgba(29,29,31,.07);border-radius:999px;padding:2px}
+.seg button{border:0;background:transparent;border-radius:999px;padding:3px 12px;font-size:12.5px;font-weight:500;color:var(--muted)}
+.seg button.on{background:var(--hi);color:var(--ink);font-weight:600}
+.decide{border-top:1px solid var(--hair);padding-top:28px;display:flex;flex-direction:column;gap:16px}
+.decide h2{margin-bottom:0}
+.note-in{font:inherit;font-size:14px;width:100%;border:1px solid var(--hair);border-radius:14px;padding:11px 14px;background:var(--sheet);color:var(--ink)}
+.act{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{border-radius:999px;padding:10px 22px;font-weight:600;font-size:14.5px;white-space:nowrap;border:1px solid var(--hair);background:transparent}
+.btn:hover{background:rgba(29,29,31,.05)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:#0064c8}
+.verdict{font-size:17px;font-weight:700}
+.verdict.approved{color:var(--ok)} .verdict.rejected{color:var(--bad)}
+.empty h1{font-size:26px}
+.empty p{color:var(--ink-2);margin-top:10px;max-width:56ch}
+
+.right{padding:22px 6px 22px 16px;min-height:0;display:flex}
+.chat{flex:1;min-width:0;min-height:0;border-radius:30px;background:var(--bg);box-shadow:var(--raised);display:flex;flex-direction:column;overflow:hidden}
+.chat-head{display:flex;align-items:center;gap:10px;padding:18px 20px 10px}
+.chat-head b{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.chat-head span{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.working .pulse{background:var(--accent)}
+@media (prefers-reduced-motion: no-preference){.working .pulse{animation:pulse 1s ease-in-out infinite alternate}}
+@keyframes pulse{from{opacity:.25}to{opacity:1}}
+.chat-close{margin-left:auto;background:transparent;border:0;color:var(--muted);font-size:22px;line-height:1;display:none}
+.feed{flex:1;overflow:auto;padding:10px 18px 14px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.bubble{max-width:90%;border-radius:20px;padding:10px 14px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.bubble.agent{background:var(--hi);align-self:flex-start;color:var(--ink)}
+.bubble.user{background:var(--accent);color:var(--accent-ink);align-self:flex-end}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.step{display:block;width:100%;border:0;background:transparent;padding:0 2px;text-align:left;font-size:13px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+.step i{font-style:normal;font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-right:6px}
+.step.open{white-space:pre-wrap;color:var(--ink-2)}
+.step:hover{color:var(--ink-2)}
+.chip{display:inline-flex;align-items:baseline;gap:5px;max-width:100%;border:0;border-radius:999px;background:rgba(29,29,31,.06);padding:3px 10px;font-size:12px;color:var(--ink-2);text-align:left}
+.chip i{font-style:normal;color:var(--muted);flex:none}
+.chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+button.chip{color:var(--accent);font-weight:600}
+button.chip:hover{background:rgba(0,113,227,.12)}
+.chip.bad,.chip.bad i{color:var(--bad)}
+.chip.good,.chip.good i{color:var(--ok)}
+.event{font-size:12px;color:var(--bad);padding:0 4px;overflow-wrap:anywhere}
+.tag{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);background:rgba(29,29,31,.06);border-radius:999px;padding:1px 8px;margin-top:6px}
+.ask{display:flex;gap:10px;padding:14px 18px 18px;align-items:center}
+.ask input{flex:1;min-width:0;font:inherit;font-size:14px;border:0;border-radius:999px;padding:11px 16px;background:var(--hi);color:var(--ink)}
+.ask input::placeholder{color:var(--muted)}
+.ask button{flex:none;width:40px;height:40px;border:0;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:18px;font-weight:700;line-height:1}
+.fab{display:none}
+
+@media (max-width:1140px){
+  .app{grid-template-columns:330px minmax(0,1fr)}
+  .right{position:fixed;top:0;right:0;bottom:0;width:min(400px,100%);z-index:20;padding:16px}
+  .right[data-open="0"]{display:none}
+  .chat{box-shadow:0 18px 50px rgba(29,29,31,.28)}
+  .chat-close{display:block}
+  .fab{display:block;position:fixed;right:18px;bottom:18px;z-index:10;border:0;border-radius:999px;background:var(--bg);color:var(--accent);padding:12px 20px;font-weight:600;box-shadow:var(--raised)}
+}
+@media (max-width:760px){
+  html,body{height:auto}
+  .app{display:block;height:auto}
+  .left{overflow:visible;padding:22px 4px 8px}
+  .center{overflow:visible}
+  .detail{padding:26px 4px 104px}
+  h1{font-size:25px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="left" id="left" aria-label="Approvals"></nav>
+  <main class="center" id="center"></main>
+  <aside class="right" id="right" data-open="0" aria-label="Chat with the agent">
+    <div class="chat">
+      <div class="chat-head" id="chat-head"><b>Agent</b><span><i class="pulse"></i><em id="status" style="font-style:normal">connecting</em></span>
+        <button class="chat-close" id="chat-close" aria-label="Close chat">×</button></div>
+      <div class="feed" id="feed"></div>
+      <form class="ask" id="ask-form"><input id="ask-input" type="text" placeholder="Message the agent" autocomplete="off" aria-label="Message the agent"><button type="submit" aria-label="Send">↑</button></form>
+    </div>
+  </aside>
+  <button class="fab" id="chat-open">Chat</button>
+</div>
+
+<script>
+const approvals = new Map();   // id -> approval, in arrival order
+const feed = [];
+let selected = null, shownKey = null, lastSeq = 0, lang = 'orig', dirty = false;
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const fileUrl = (path) => '/api/file?path=' + encodeURIComponent(path);
+const isImage = (path) => /\.(jpe?g|png|webp|gif)$/i.test(path);
+
+function kind(a) {
+  if (a.tool === 'send_email') return 'Email to ' + a.args.to;
+  if (a.tool === 'edit_file') return 'Edit ' + a.args.path;
+  return a.args.system + ': ' + a.args.record;
+}
+const toolTag = { send_email: 'Email', edit_file: 'File edit', update_record: 'Record change' };
+const statusLabel = { pending: 'Needs your approval', approved: 'Approved', rejected: 'Rejected' };
+
+function renderLeft() {
+  const list = [...approvals.values()].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
+  const waiting = list.filter((a) => a.status === 'pending').length;
+  $('left').innerHTML = '<div class="brand"><b>Dockside</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
+    (list.length ? list.map((a) => '<button class="ap ' + (a.id === selected ? 'on ' : '') + (a.status === 'pending' ? '' : 'done') + '" data-open="' + a.id + '"' + (a.id === selected ? ' aria-current="true"' : '') + '>' +
+      '<span class="dot dot-' + esc(a.severity) + '"></span><span><b>' + esc(a.headline) + '</b><span class="why">' + esc(kind(a)) + '</span><span class="tag">' + toolTag[a.tool] + '</span><span class="st st-' + a.status + '">' + statusLabel[a.status] + '</span></span></button>').join('')
+      : '<p class="hint">Approvals appear here when the agent wants to send an email, change a file or post to a system.</p>');
+}
+
+function actionView(a) {
+  const x = a.args;
+  if (a.tool === 'send_email') {
+    const en = lang === 'en' && x.translation;
+    const seg = x.translation ? '<div class="seg"><button class="' + (en ? '' : 'on') + '" data-lang="orig">' + esc(x.language) + '</button><button class="' + (en ? 'on' : '') + '" data-lang="en">English</button></div>' : '';
+    return '<div class="letter"><div class="letter-top"><span>To ' + esc(x.to) + '</span>' + seg + '</div><p class="subject">' + esc(x.subject) + '</p><div class="body">' + esc(en ? x.translation : x.body) + '</div></div>';
+  }
+  if (a.tool === 'edit_file') {
+    return '<p><a href="' + fileUrl(x.path) + '" target="_blank" rel="noopener">' + esc(x.path) + '</a></p><p class="label">Replace</p><pre class="quote">' + esc(x.find) + '</pre><p class="label">With</p><pre class="quote">' + esc(x.replace) + '</pre>';
+  }
+  return '<p><b>' + esc(x.system) + '</b> · ' + esc(x.record) + '</p><div class="scroll"><table><thead><tr><th>Field</th><th>New value</th></tr></thead><tbody>' +
+    Object.entries(x.changes).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>').join('') + '</tbody></table></div>';
+}
+
+function renderCenter(force) {
+  const a = approvals.get(selected);
+  const key = a ? a.id + a.status + lang : 'empty';
+  if (!force && key === shownKey) return;   // leave the note field alone while it is being typed in
+  shownKey = key;
+  if (!a) {
+    $('center').innerHTML = '<div class="detail empty"><div><h1>No approvals yet</h1><p>The agent reads the document folder on its own. It stops and asks here before it sends an email, changes a file or changes a record in another system.</p></div></div>';
+    return;
+  }
+  const image = a.evidence.find(isImage);
+  const decide = a.status === 'pending'
+    ? '<h2>Your approval</h2><input class="note-in" id="note" type="text" placeholder="Optional note to the agent" aria-label="Note to the agent" autocomplete="off">' +
+      '<div class="act"><button class="btn btn-primary" data-decide="1">Approve</button><button class="btn" data-decide="0">Reject</button></div>' +
+      '<p class="cap">Approving records the action. Mail, file and system connections are not wired up yet, so nothing is sent or changed.</p>'
+    : '<h2>Decided</h2><p class="verdict ' + a.status + '">' + statusLabel[a.status] + ' at ' + clock(a.decided) + '</p>' + (a.note ? '<p class="found">Note: ' + esc(a.note) + '</p>' : '');
+  $('center').innerHTML = '<div class="detail">' +
+    '<header><div class="sevline sev-' + esc(a.severity) + '">' + esc(a.severity) + ' · ' + a.id + '</div><h1>' + esc(a.headline) + '</h1></header>' +
+    '<section><h2>Why</h2><p class="found">' + esc(a.reason) + '</p></section>' +
+    (a.evidence.length ? '<section><h2>Evidence</h2><div class="evidence">' + a.evidence.map((p) => '<a href="' + fileUrl(p) + '" target="_blank" rel="noopener">' + esc(p) + '</a>').join('') +
+      (image ? '<img src="' + fileUrl(image) + '" alt="' + esc(image) + '">' : '') + '</div></section>' : '') +
+    '<section><h2>' + esc(kind(a)) + '</h2>' + actionView(a) + '</section>' +
+    '<section class="decide">' + decide + '</section></div>';
+  $('center').scrollTop = 0;
+}
+
+let feedShown = 0;
+function renderFeed() {
+  const el = $('feed');
+  for (; feedShown < feed.length; feedShown++) {
+    const e = feed[feedShown];
+    if (e.kind === 'user' || e.kind === 'agent') {
+      const div = document.createElement('div');
+      div.className = 'bubble ' + e.kind; div.textContent = e.text; el.appendChild(div);
+    } else if (e.kind === 'thought' || e.kind === 'step') {
+      const line = document.createElement('button');
+      line.className = 'step'; line.type = 'button';
+      line.title = e.text.length > e.label.length ? 'Show all' : '';
+      const tag = document.createElement('i'); tag.textContent = e.kind === 'thought' ? 'Thought' : 'Step';
+      const body = document.createElement('span'); body.textContent = e.label;
+      line.append(tag, body);
+      line.addEventListener('click', () => { const open = line.classList.toggle('open'); body.textContent = open ? e.text : e.label; });
+      el.appendChild(line);
+    } else if (e.kind === 'error') {
+      const div = document.createElement('div');
+      div.className = 'event'; div.textContent = clock(e.ts) + ' · ' + e.text; el.appendChild(div);
+    } else {
+      // every action the agent takes is a chip; consecutive ones share a row
+      let row = el.lastElementChild;
+      if (!row || !row.classList.contains('chips')) { row = document.createElement('div'); row.className = 'chips'; el.appendChild(row); }
+      const chip = document.createElement(e.open ? 'button' : 'span');
+      chip.className = 'chip' + (e.tone ? ' ' + e.tone : '');
+      chip.title = clock(e.ts) + ' · ' + e.text;
+      if (e.open) chip.dataset.open = e.open;
+      const verb = document.createElement('i'); verb.textContent = e.verb;
+      const label = document.createElement('span'); label.textContent = e.label;
+      chip.append(verb, label); row.appendChild(chip);
+    }
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+function render() {
+  dirty = false;
+  if (!approvals.has(selected)) selected = ([...approvals.values()].find((a) => a.status === 'pending') || [...approvals.values()][0] || {}).id || null;
+  renderLeft(); renderCenter(false); renderFeed();
+}
+function schedule() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
+
+function apply(e) {
+  if (e.seq <= lastSeq) return;   // the stream replays from the start after a reconnect
+  lastSeq = e.seq;
+  if (e.kind === 'approval') {
+    const a = e.approval;
+    approvals.set(a.id, a);
+    feed.push(a.status === 'pending'
+      ? { kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.id }
+      : { kind: 'chip', ts: e.ts, verb: a.status === 'approved' ? 'Approved' : 'Rejected', label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.id, tone: a.status === 'approved' ? 'good' : 'bad' });
+  }
+  else if (e.kind === 'status') { $('status').textContent = e.value; $('chat-head').classList.toggle('working', e.value === 'working'); }
+  else feed.push(e);
+  schedule();
+}
+
+const source = new EventSource('/api/events');
+source.onmessage = (m) => apply(JSON.parse(m.data));
+source.onopen = () => { if ($('status').textContent === 'connecting' || $('status').textContent === 'disconnected') $('status').textContent = 'idle'; };
+source.onerror = () => { $('status').textContent = 'disconnected'; $('chat-head').classList.remove('working'); };
+
+async function post(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) { const detail = (await res.json().catch(() => ({}))).detail; feed.push({ kind: 'error', ts: Date.now() / 1000, text: detail || 'Request failed (' + res.status + ').' }); schedule(); }
+  return res.ok;
+}
+
+document.addEventListener('click', (e) => {
+  const open = e.target.closest('[data-open]');
+  if (open && open.dataset.open.startsWith('A-')) { selected = open.dataset.open; lang = 'orig'; render(); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
+  const l = e.target.closest('[data-lang]');
+  if (l) { lang = l.dataset.lang; renderCenter(false); return; }
+  const d = e.target.closest('[data-decide]');
+  if (d) { post('/api/approvals/' + selected, { approved: d.dataset.decide === '1', note: $('note') ? $('note').value : '' }); return; }
+  if (e.target.closest('#chat-open') || e.target.closest('#chat-close')) $('right').dataset.open = $('right').dataset.open === '1' ? '0' : '1';
+});
+
+$('ask-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('ask-input'); const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  if (!(await post('/api/chat', { text }))) input.value = text;
+});
+
+render();
+</script>
+</body>
+</html>
