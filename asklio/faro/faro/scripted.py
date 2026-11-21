@@ -43,6 +43,7 @@ class ScriptedModel(BaseChatModel):
             if last.name == "open_issue":
                 return AIMessage("", tool_calls=[_call("send_email", {
                     "issue_id": "I-1", "headline": "Ask the sample supplier to confirm the quantity", "reason": "A sample action for the sample issue.",
+                    "needs_human": True, "human_reason": "Scripted sample.",
                     "to": ["sample@example.com"], "to_name": "Sample Supplier", "language": "English",
                     "brief": "Sample: please confirm quantity\n\nHello,\n\nplease confirm the quantity shipped.\n\nThe team",
                 }, n)])

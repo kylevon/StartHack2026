@@ -31,7 +31,18 @@ a{color:var(--accent)}
 
 .app{display:grid;grid-template-columns:360px minmax(0,1fr) 368px;height:100%;padding:0 16px}
 
-.left{overflow:auto;padding:26px 16px 26px 12px;display:flex;flex-direction:column;gap:18px}
+.left{display:flex;flex-direction:column;min-height:0;padding:0 16px 0 12px}
+.left-list{flex:1;min-height:0;overflow:auto;padding:26px 6px 18px 0;margin-right:-6px;display:flex;flex-direction:column;gap:18px}
+.auto{flex:none;border-top:1px solid var(--hair);padding:14px 6px 18px}
+.auto-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.auto b{font-size:14.5px;font-weight:600}
+.auto p{font-size:12px;color:var(--muted);line-height:1.4;margin-top:6px}
+.switch{flex:none;position:relative;width:46px;height:28px;border:0;border-radius:999px;background:rgba(29,29,31,.16);padding:0;transition:background .18s ease}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--hi);transition:transform .18s ease}
+.switch[aria-checked="true"]{background:var(--accent)}
+.switch[aria-checked="true"]::after{transform:translateX(18px)}
+.auto .row{display:flex;gap:8px;margin-top:10px}
+.auto .btn{padding:7px 14px;font-size:13px}
 .brand{padding:0 6px 4px}
 .brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
 .brand span{font-size:13px;color:var(--muted)}
@@ -98,6 +109,14 @@ tr:last-child td{border-bottom:0}
 .feed{flex:1;overflow:auto;padding:10px 18px 14px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .bubble{max-width:90%;border-radius:20px;padding:10px 14px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
 .bubble.agent{background:var(--hi);align-self:flex-start;color:var(--ink)}
+.rich{white-space:normal}
+.rich p{margin:0}
+.rich p + p,.rich p + ul,.rich p + ol,.rich ul + p,.rich ol + p{margin-top:8px}
+.rich ul,.rich ol{margin:0;padding-left:1.25em}
+.rich li{margin:3px 0}
+.rich strong,.tl-sum strong,.step strong,.cap strong{font-weight:700;color:var(--ink)}
+.bubble.user strong{color:inherit}
+.rich code,.tl-sum code{font-family:var(--mono);font-size:.92em;background:rgba(29,29,31,.07);border-radius:5px;padding:0 4px}
 .bubble.user{background:var(--accent);color:var(--accent-ink);align-self:flex-end}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .step{display:block;width:100%;border:0;background:transparent;padding:0 2px;text-align:left;font-size:13px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
@@ -130,7 +149,8 @@ button.chip:hover{background:rgba(0,113,227,.12)}
 @media (max-width:760px){
   html,body{height:auto}
   .app{display:block;height:auto}
-  .left{overflow:visible;padding:22px 4px 8px}
+  .left{padding:0 4px}
+  .left-list{overflow:visible;padding:22px 0 12px;margin-right:0}
   .center{overflow:visible}
   .detail{padding:26px 4px 104px}
   h1{font-size:25px}
@@ -187,19 +207,35 @@ button.chip:hover{background:rgba(0,113,227,.12)}
 .plain-next{font-size:17px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
 .plain-next.none{color:var(--muted);font-weight:500}
 .timeline{display:flex;flex-direction:column}
-.tl{display:grid;grid-template-columns:86px minmax(0,1fr);gap:16px;padding:14px 0;border-top:1px solid var(--hair)}
+.logform{display:flex;gap:10px;align-items:center}
+.logform .note-in{flex:1;min-width:0}
+.tl{padding:16px 0;border-top:1px solid var(--hair)}
 .tl:first-child{border-top:0}
-.tl time{font-size:12px;color:var(--muted);line-height:1.5;padding-top:2px}
-.tl .what{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.tl .what.you{color:var(--accent)} .tl .what.in{color:var(--warn)} .tl .what.bad{color:var(--ink)} .tl .what.good{color:var(--ok)}
-.tl p{font-size:14.5px;color:var(--ink-2);margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
-.tl .msg{margin:8px 0 0}
-@media (max-width:760px){.tl{grid-template-columns:minmax(0,1fr);gap:4px}}
+.tl-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.tl time{font-size:12px;color:var(--muted);white-space:nowrap;flex:none}
+.badge{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 10px;margin-right:8px;white-space:nowrap}
+.b-agent{background:rgba(29,29,31,.08);color:var(--ink-2)}
+.b-you{background:var(--accent);color:var(--accent-ink)}
+.b-out{background:var(--hi);color:var(--ink);box-shadow:inset 0 0 0 1px var(--hair)}
+.b-in{background:#f6dfb4;color:#5f3d00}
+.b-done{background:#cfe9d6;color:#14532a}
+.b-auto{background:var(--ink);color:var(--hi)}
+.tl-did{font-size:12.5px;color:var(--muted)}
+.tl-line{display:flex;align-items:flex-start;gap:12px;width:100%;margin-top:8px;padding:0;border:0;background:transparent;text-align:left;font-size:14.5px;line-height:1.5;color:var(--ink-2)}
+.tl-sum{flex:1;min-width:0;overflow-wrap:anywhere}
+.tl-full{font-size:14px;color:var(--ink-2);margin-top:10px;padding:14px 16px;background:var(--hi);border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.tl .msg{margin:10px 0 0}
+.chev{flex:none;display:inline-block;width:22px;height:22px;line-height:20px;text-align:center;font-size:20px;color:var(--muted);transform:rotate(90deg);transition:transform .15s ease}
+.chev.up{transform:rotate(-90deg)}
+button.tl-line:hover .chev{color:var(--ink)}
 </style>
 </head>
 <body>
 <div class="app">
-  <nav class="left" id="left" aria-label="Approvals"></nav>
+  <nav class="left" aria-label="Issues">
+    <div class="left-list" id="left"></div>
+    <div class="auto" id="auto"></div>
+  </nav>
   <main class="center" id="center">
     <div class="viewbar" id="viewbar" hidden><div class="seg" role="tablist">
       <button role="tab" id="tab-decision" data-view="decision">Decision</button>
@@ -227,13 +263,56 @@ let view = 'decision';          // centre tab: 'decision' or 'history'
 const evidenceOpen = new Map(); // issue id -> evidence path shown in the viewer
 const msgLang = new Map();      // message or draft key -> 'orig' when the reader switched away from English
 const sheetOpen = new Map();    // file path -> sheet index
+const expanded = new Set();     // history entries the reader opened in full
 let shownPlace = '';
+let autoOn = false, autoAsk = false;   // auto mode, and whether the page is asking to confirm switching it on
 let historyData = null;         // { id, entries, problem } for the issue on screen
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const stamp = (ts) => new Date(ts * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+// Text the model wrote for people: escaped, then light markdown. `mdi` is for one line, `md` also does lists and line breaks.
+const mdi = (v) => esc(v).replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[\s(])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>').replace(/`([^`\n]+?)`/g, '<code>$1</code>');
+function md(v) {
+  const out = []; let list = null, tag = 'ul', para = [];
+  const flush = () => { if (para.length) { out.push('<p>' + para.join('<br>') + '</p>'); para = []; } if (list) { out.push('<' + tag + '>' + list.join('') + '</' + tag + '>'); list = null; } };
+  for (const line of String(v).split('\n')) {
+    const item = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
+    if (item) { if (para.length) flush(); if (!list) { list = []; tag = item[2] ? 'ol' : 'ul'; } list.push('<li>' + mdi(item[3]) + '</li>'); }
+    else if (!line.trim()) flush();
+    else { if (list) flush(); para.push(mdi(line)); }
+  }
+  flush();
+  return out.join('');
+}
+// Older text has no emphasis of its own. Ask the server to add some (same words, key facts in bold), once per text.
+const richCache = new Map(), richWanted = new Set();
+let richTimer = null;
+function rich(text) {
+  if (!text) return '';
+  if (text.length < 80 || text.includes('**')) return md(text);
+  if (richCache.has(text)) return md(richCache.get(text));
+  richWanted.add(text); clearTimeout(richTimer); richTimer = setTimeout(flushRich, 150);
+  return md(text);
+}
+async function flushRich() {
+  const texts = [...richWanted].filter((t) => !richCache.has(t)); richWanted.clear();
+  if (!texts.length) return;
+  let marked = texts;
+  try { const res = await fetch('/api/rich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts }) }); if (res.ok) marked = (await res.json()).texts; } catch (err) { /* keep the plain text */ }
+  texts.forEach((t, k) => richCache.set(t, marked[k] || t));
+  if (marked.some((m, k) => m !== texts[k])) renderCenter(true);
+}
+const bare = (v) => String(v).replace(/\*\*/g, '');
+// The quick version of a long text: whole leading sentences while they fit.
+function gist(text, limit = 170) {
+  const flat = String(text).replace(/\s+/g, ' ').trim();
+  if (flat.length <= limit) return flat;
+  let line = '';
+  for (const sentence of flat.split(/(?<=[.!?])\s+/)) { if ((line + ' ' + sentence).length > limit) break; line = (line + ' ' + sentence).trim(); }
+  return line || flat.slice(0, limit).replace(/\s+\S*$/, '') + '…';
+}
 const q = (path) => encodeURIComponent(path);
 const base = (path) => path.split('/').pop();
 const person = (s) => s.replace(/\s*<[^>]*>/, '') || s;
@@ -266,8 +345,14 @@ function renderLeft() {
   const waiting = [...approvals.values()].filter((a) => a.status === 'pending').length;
   $('left').innerHTML = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
     (list.length ? list.map((i) => { const [text, tone] = nextLine(i); return '<button class="ap ' + (i.id === selected ? 'on ' : '') + (rank(i) === 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(i.title) + '">' +
-      '<span class="dot dot-' + esc(i.severity) + '"></span><span><b>' + esc(i.title) + '</b><span class="st st-' + tone + '">' + esc(text) + '</span></span></button>'; }).join('')
+      '<span class="dot dot-' + esc(i.severity) + '"></span><span><b>' + esc(bare(i.title)) + '</b><span class="st st-' + tone + '">' + esc(text) + '</span></span></button>'; }).join('')
       : '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>');
+}
+
+function renderAuto() {
+  $('auto').innerHTML = '<div class="auto-row"><b>Auto mode</b><button class="switch" id="auto-switch" role="switch" aria-checked="' + autoOn + '" aria-label="Auto mode"></button></div>' +
+    (autoAsk ? '<p>Emails and actions the agent marks as routine will go out without you reading them first. Anything that commits money or places an order still waits for you.</p><div class="row"><button class="btn btn-primary" data-auto="1">Turn on</button><button class="btn" data-auto="cancel">Cancel</button></div>'
+      : '<p>' + (autoOn ? 'On. Routine emails and actions go ahead without asking. Anything the agent marks as needing a person still waits here.' : 'Off. Every email and action waits for your approval.') + '</p>');
 }
 
 /* ---------- shared pieces ---------- */
@@ -287,21 +372,22 @@ function actionView(a) {
   if (a.tool === 'edit_file') {
     return '<div><p class="label" style="margin-top:0">In ' + esc(x.path) + ', replace</p><pre class="quote">' + esc(x.find) + '</pre><p class="label">with</p><pre class="quote">' + esc(x.replace) + '</pre></div>';
   }
-  return '<div><p><b>' + esc(x.system) + '</b> · ' + esc(x.record) + '</p><div class="scroll"><table><thead><tr><th>Field</th><th>New value</th></tr></thead><tbody>' +
-    Object.entries(x.changes).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>').join('') + '</tbody></table></div></div>';
+  return '<div><p><b>' + esc(x.system) + '</b> · ' + esc(x.record) + '</p><div class="scroll"><table><thead><tr><th>Field</th><th>' + esc(x.system) + ' says</th><th>Should be</th></tr></thead><tbody>' +
+    (Array.isArray(x.changes) ? x.changes : Object.entries(x.changes).map(([field, new_value]) => ({ field, old_value: '', new_value })))
+      .map((c) => '<tr><td>' + esc(c.field) + '</td><td>' + esc(c.old_value || 'not recorded') + '</td><td><b>' + esc(c.new_value) + '</b></td></tr>').join('') + '</tbody></table></div></div>';
 }
 
 /* ---------- centre: the decision page ---------- */
 function nextAction(issue) {
   const waiting = pendingOf(issue);
-  const cards = waiting.map((a) => '<div class="next"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(a.headline) + '</h3><p class="reason">' + esc(a.reason) + '</p></div>' +
+  const cards = waiting.map((a) => '<div class="next"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(bare(a.headline)) + '</h3><div class="reason rich">' + rich(a.reason) + '</div>' + (a.human_reason ? '<p class="cap" style="margin-top:8px">' + (a.needs_human ? 'Needs you: ' : 'Routine, would go ahead in auto mode: ') + mdi(a.human_reason) + '</p>' : '') + '</div>' +
     actionView(a) +
     '<div class="row"><input class="note-in" id="note-' + a.id + '" type="text" placeholder="Optional note to the agent" aria-label="Note to the agent" autocomplete="off">' +
     '<button class="btn" data-decide="0" data-id="' + a.id + '">Reject</button><button class="btn btn-primary" data-decide="1" data-id="' + a.id + '">' + (a.live ? 'Approve and send' : 'Approve') + '</button></div>' +
     '<p class="cap">' + (a.live ? 'Approving sends this email straight away from the team mailbox' + (a.args.translation ? ', in ' + esc(a.args.language) : '') + '. It cannot be recalled.' : 'Approving only records this action. This kind of action is not connected to an outside system yet.') + '</p></div>').join('');
   let plain = '';
   if (issue.status === 'resolved') plain = '<p class="plain-next none">None. This issue is resolved.</p>';
-  else if (issue.next_step) plain = '<p class="plain-next">' + esc(issue.next_step) + '</p><p class="cap" style="margin-top:6px">This has to happen outside Faro. The agent updates it when something changes.</p>';
+  else if (issue.next_step) plain = '<div class="plain-next rich">' + rich(issue.next_step) + '</div><p class="cap" style="margin-top:6px">This has to happen outside Faro. The agent updates it when something changes.</p>';
   else if (!waiting.length && awaiting(issue)) plain = '<p class="plain-next">Waiting for a reply.</p><p class="cap" style="margin-top:6px">Nothing for you to do. The reply will appear in History and the agent will pick it up.</p>';
   else if (!waiting.length) plain = '<p class="plain-next none">None.</p>';
   return cards + (plain ? '<div' + (cards ? ' style="margin-top:18px"' : '') + '>' + plain + '</div>' : '');
@@ -312,9 +398,13 @@ function decisionView(issue) {
   if (!evidenceOpen.has(issue.id) && issue.evidence.length) evidenceOpen.set(issue.id, issue.evidence[0]);
   const open = evidenceOpen.get(issue.id);
   return '<div class="detail">' +
-    '<header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(issue.title) + '</h1></header>' +
-    '<section><h2>Why</h2><p class="found">' + esc(issue.summary) + '</p></section>' +
+    '<header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(bare(issue.title)) + '</h1></header>' +
+    '<section><h2>Why</h2><div class="found rich">' + rich(issue.summary) + '</div></section>' +
     '<section><h2>Next action</h2>' + nextAction(issue) + '</section>' +
+    ((issue.corrections || []).length ? '<section><h2>Corrections</h2><div class="scroll"><table><thead><tr><th>Record</th><th>Field</th><th>Was</th><th>Now</th><th></th></tr></thead><tbody>' +
+      issue.corrections.map((c) => '<tr><td>' + esc(c.system) + ' · ' + esc(c.record) + '</td><td>' + esc(c.field) + '</td><td>' + esc(c.old_value || 'not recorded') + '</td><td><b>' + esc(c.new_value) + '</b></td><td>' +
+        (c.applied_at ? '<span class="cap">Changed in ' + esc(c.system) + ' ' + esc(stamp(c.applied_at)) + '</span>' : '<button class="btn" style="padding:5px 12px;font-size:12.5px" data-applied="' + c.id + '">Mark as changed in ' + esc(c.system) + '</button>') + '</td></tr>').join('') +
+      '</tbody></table></div><p class="cap" style="margin-top:10px">Faro and the agent treat the corrected value as the truth from the moment you approve it. The system itself only changes when someone enters it there.</p></section>' : '') +
     (issue.evidence.length ? '<section><h2>Evidence</h2><div class="tiles">' + issue.evidence.map((p) => '<button class="tile ' + (p === open ? 'on' : '') + '" data-evidence="' + esc(p) + '" title="' + esc(p) + '"><i>' + esc((p.split('.').pop() || 'file').slice(0, 4)) + '</i><span>' + esc(base(p)) + '</span></button>').join('') + '</div>' +
       '<div class="viewer" id="viewer"><p class="cap">Opening…</p></div></section>' : '') +
     '</div>';
@@ -350,26 +440,39 @@ async function loadEvidence(path) {
 }
 
 /* ---------- centre: the history of one issue ---------- */
+// Who did it decides the badge: the agent, you, or mail going out and coming in.
 const WHAT = {
-  found: ['Agent found', ''], note: ['Agent noted', ''], proposed: ['Agent proposed', ''], resolved: ['Resolved', 'good'], reopened: ['Reopened', 'bad'],
-  approved: ['You approved', 'you'], rejected: ['You rejected', 'you'], sent: ['You approved, sent', 'you'], failed: ['Sending failed', 'bad'],
-  mail_sent: ['Email sent', ''], mail_received: ['Email received', 'in'],
+  found: ['Agent', 'found this', 'agent'], note: ['Agent', 'noted', 'agent'], proposed: ['Agent', 'proposed', 'agent'], resolved: ['Agent', 'resolved it', 'done'], reopened: ['Agent', 'reopened it', 'agent'],
+  auto_approved: ['Auto mode', 'approved', 'auto'], auto_sent: ['Auto mode', 'approved and sent', 'auto'],
+  logged: ['You', 'recorded', 'you'], applied: ['You', 'changed it in the system', 'you'],
+  approved: ['You', 'approved', 'you'], rejected: ['You', 'rejected', 'you'], sent: ['You', 'approved and sent', 'you'], failed: ['You', 'approved, sending failed', 'you'],
+  mail_sent: ['Email sent', '', 'out'], mail_received: ['Email received', '', 'in'],
 };
 function historyView(issue) {
   let body;
   if (!historyData || historyData.id !== issue.id) body = '<p class="cap">Reading the history and the mailbox…</p>';
   else body = (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
     '<div class="timeline">' + [...historyData.entries].reverse().map((e) => {
-      const [label, tone] = WHAT[e.kind] || [e.kind, ''];
+      const [who, did, tone] = WHAT[e.kind] || ['', e.kind, 'agent'];
       const mail = e.kind.startsWith('mail_');
-      const content = mail
+      const key = e.kind + (e.message_id || e.ts);
+      const flat = String(e.text).replace(/\s+/g, ' ').trim();
+      const short = e.summary || gist(mail ? (e.english || e.text) : e.text);
+      const more = mail || bare(short) !== bare(flat);
+      const open = more && expanded.has(key);
+      const full = !open ? '' : mail
         ? letter(e.kind === 'mail_sent' ? 'To ' + esc(people(e.to).join(', ')) : 'From ' + esc(person(e.from)), e.subject, e.text, e.english, e.language, e.message_id, e.direction) +
           (e.translation_error ? '<p class="cap">Not translated: ' + esc(e.translation_error) + '</p>' : '')
-        : '<p>' + esc(e.text) + (e.ref ? ' <span class="cap">' + esc(e.ref) + '</span>' : '') + '</p>';
-      return '<div class="tl"><time>' + esc(stamp(e.ts)) + '</time><div><span class="what ' + tone + '">' + label + '</span>' + content + '</div></div>';
+        : '<div class="tl-full rich">' + rich(e.text) + '</div>';
+      const rest = mail ? (e.kind === 'mail_sent' ? 'to ' + esc(people(e.to).join(', ')) : 'from ' + esc(person(e.from))) : esc(did) + (e.ref ? ' · ' + esc(e.ref) : '');
+      const line = '<span class="tl-sum">' + mdi(short) + '</span>' + (more ? '<span class="chev' + (open ? ' up' : '') + '" aria-hidden="true">›</span>' : '');
+      return '<div class="tl"><div class="tl-head"><span><span class="badge b-' + tone + '">' + who + '</span><span class="tl-did">' + rest + '</span></span><time>' + esc(stamp(e.ts)) + '</time></div>' +
+        (more ? '<button class="tl-line" data-expand="' + esc(key) + '" aria-expanded="' + open + '" title="' + (open ? 'Show less' : 'Show all') + '">' + line + '</button>' : '<div class="tl-line">' + line + '</div>') + full + '</div>';
     }).join('') + '</div>';
-  return '<div class="detail"><header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(issue.title) + '</h1>' +
-    '<p class="cap" style="margin-top:8px">Everything that happened on this issue, newest first. Emails are read from the team mailbox.</p></header><section>' + body + '</section></div>';
+  return '<div class="detail"><header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(bare(issue.title)) + '</h1>' +
+    '<p class="cap" style="margin-top:8px">Everything that happened on this issue, newest first, each as one line. Open an entry to read it in full. Emails are read from the team mailbox.</p></header>' +
+    '<form class="logform" data-log="' + issue.id + '"><input class="note-in" id="log-' + issue.id + '" type="text" placeholder="Add something that happened outside Faro: a call, a meeting, a decision" aria-label="Add to the history" autocomplete="off"><button class="btn" type="submit">Add</button></form>' +
+    '<section>' + body + '</section></div>';
 }
 async function loadHistory() {
   const id = selected;
@@ -389,7 +492,7 @@ async function loadHistory() {
 function renderCenter(force) {
   const issue = issues.get(selected);
   if (!issue) view = 'decision';
-  const key = !issue ? 'empty' : view + issue.id + issue.updated + of(issue).map((a) => a.status + a.outcome).join();
+  const key = !issue ? 'empty' : view + issue.id + issue.updated + of(issue).map((a) => a.status + a.outcome).join() + (issue.corrections || []).map((c) => c.applied_at).join();
   $('viewbar').hidden = !issue;
   $('tab-decision').className = view === 'decision' ? 'on' : '';
   $('tab-history').className = view === 'history' ? 'on' : '';
@@ -413,14 +516,14 @@ function renderFeed() {
     const e = feed[feedShown];
     if (e.kind === 'user' || e.kind === 'agent') {
       const div = document.createElement('div');
-      div.className = 'bubble ' + e.kind; div.textContent = e.text; el.appendChild(div);
+      div.className = 'bubble ' + e.kind; if (e.kind === 'agent') { div.classList.add('rich'); div.innerHTML = md(e.text); } else div.textContent = e.text; el.appendChild(div);
     } else if (e.kind === 'thought' || e.kind === 'step') {
       const line = document.createElement('button');
       line.className = 'step'; line.type = 'button';
       const tag = document.createElement('i'); tag.textContent = e.kind === 'thought' ? 'Thought' : 'Step';
-      const body = document.createElement('span'); body.textContent = e.label;
+      const body = document.createElement('span'); body.innerHTML = mdi(e.label);
       line.append(tag, body);
-      line.addEventListener('click', () => { const open = line.classList.toggle('open'); body.textContent = open ? e.text : e.label; });
+      line.addEventListener('click', () => { const open = line.classList.toggle('open'); body.innerHTML = open ? md(e.text) : mdi(e.label); });
       el.appendChild(line);
     } else if (e.kind === 'error') {
       const div = document.createElement('div');
@@ -433,7 +536,7 @@ function renderFeed() {
       chip.title = clock(e.ts) + ' · ' + e.text;
       if (e.open) { chip.dataset.open = e.open; if (e.history) chip.dataset.history = '1'; }
       const verb = document.createElement('i'); verb.textContent = e.verb;
-      const label = document.createElement('span'); label.textContent = e.label;
+      const label = document.createElement('span'); label.textContent = bare(e.label);
       chip.append(verb, label); row.appendChild(chip);
     }
   }
@@ -448,7 +551,11 @@ function render() {
 function schedule() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
 
 let historyTimer = null;
-function historyChanged() { clearTimeout(historyTimer); historyTimer = setTimeout(() => { if (view === 'history') loadHistory(); }, 400); }
+let historyLater = null;
+function historyChanged() {
+  clearTimeout(historyTimer); historyTimer = setTimeout(loadHistory, 400);
+  clearTimeout(historyLater); historyLater = setTimeout(loadHistory, 4000);
+}
 
 function apply(e) {
   if (e.seq <= lastSeq) return;   // the stream replays from the start after a reconnect
@@ -457,20 +564,24 @@ function apply(e) {
     const known = issues.has(e.issue.id);
     issues.set(e.issue.id, e.issue);
     if (!known) feed.push({ kind: 'chip', ts: e.ts, verb: 'Found', label: e.issue.title, text: e.issue.summary, open: e.issue.id });
-    if (e.issue.id === selected) historyChanged();
+    if (e.issue.id === selected && live) historyChanged();
   } else if (e.kind === 'approval') {
     const a = e.approval, before = approvals.get(a.id);
     approvals.set(a.id, a);
+    if (a.issue_id === selected && live) historyChanged();
     if (!before && a.status === 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.issue_id });
-    else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: a.outcome === 'done' ? 'Sent' : a.outcome === 'failed' ? 'Failed' : a.status === 'approved' ? 'Approved' : 'Rejected', label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
+    else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: (a.auto ? 'Auto ' : '') + (a.outcome === 'done' ? (a.auto ? 'sent' : 'Sent') : a.outcome === 'failed' ? (a.auto ? 'failed' : 'Failed') : a.status === 'approved' ? (a.auto ? 'approved' : 'Approved') : 'Rejected'), label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
   }
+  else if (e.kind === 'auto') { autoOn = e.value; autoAsk = false; renderAuto(); }
   else if (e.kind === 'status') { $('status').textContent = e.value; $('chat-head').classList.toggle('working', e.value === 'working'); }
   else if (e.kind === 'activity' && e.verb === 'Found') { /* the issue event already made this chip */ }
-  else { if (e.kind === 'mail' && e.open) e.history = true; feed.push(e); if (e.kind === 'mail') historyChanged(); }
+  else { if (e.kind === 'mail' && e.open) e.history = true; feed.push(e); if (e.kind === 'mail' && live) historyChanged(); }
   schedule();
 }
 
 const source = new EventSource('/api/events');
+let live = false;   // false while the stream replays what happened before the page opened
+setTimeout(() => { live = true; }, 1500);
 source.onmessage = (m) => apply(JSON.parse(m.data));
 source.onopen = () => { if (['connecting', 'disconnected'].includes($('status').textContent)) $('status').textContent = 'idle'; };
 source.onerror = () => { $('status').textContent = 'disconnected'; $('chat-head').classList.remove('working'); };
@@ -480,18 +591,32 @@ async function post(url, body) {
   if (!res.ok) { const detail = (await res.json().catch(() => ({}))).detail; feed.push({ kind: 'error', ts: Date.now() / 1000, text: detail || 'Request failed (' + res.status + ').' }); schedule(); }
   return res.ok;
 }
-function show(next) { view = next; renderLeft(); renderCenter(true); if (next === 'history') loadHistory(); }
+function show(next) { view = next; renderLeft(); renderCenter(true); loadHistory(); }
 
 document.addEventListener('click', (e) => {
   const t = (sel) => e.target.closest(sel);
   let el;
+  if (t('#auto-switch')) { if (autoOn) post('/api/auto', { on: false }); else { autoAsk = !autoAsk; renderAuto(); } return; }
+  if ((el = t('[data-auto]'))) { if (el.dataset.auto === '1') post('/api/auto', { on: true }); autoAsk = false; renderAuto(); return; }
   if ((el = t('[data-view]'))) { show(el.dataset.view); return; }
   if ((el = t('[data-open]')) && issues.has(el.dataset.open)) { selected = el.dataset.open; historyData = null; show(el.dataset.history ? 'history' : 'decision'); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
   if ((el = t('[data-evidence]'))) { evidenceOpen.set(selected, el.dataset.evidence); document.querySelectorAll('.tile').forEach((x) => x.classList.toggle('on', x === el)); $('viewer').innerHTML = '<p class="cap">Opening…</p>'; loadEvidence(el.dataset.evidence); return; }
   if ((el = t('[data-sheet]'))) { sheetOpen.set(el.dataset.path, Number(el.dataset.sheet)); loadEvidence(el.dataset.path); return; }
+  if ((el = t('[data-expand]'))) { const k = el.dataset.expand; if (expanded.has(k)) expanded.delete(k); else expanded.add(k); renderCenter(true); return; }
   if ((el = t('[data-msg]'))) { msgLang.set(el.dataset.msg, el.dataset.to); renderCenter(true); return; }
+  if ((el = t('[data-applied]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.applied + '/applied', { text: '' }); return; }
   if ((el = t('[data-decide]'))) { el.disabled = true; const note = $('note-' + el.dataset.id); post('/api/approvals/' + el.dataset.id, { approved: el.dataset.decide === '1', note: note ? note.value : '' }); return; }
   if (t('#chat-open') || t('#chat-close')) $('right').dataset.open = $('right').dataset.open === '1' ? '0' : '1';
+});
+
+document.addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-log]');
+  if (!form) return;
+  e.preventDefault();
+  const input = form.querySelector('input'); const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  if (!(await post('/api/issues/' + form.dataset.log + '/log', { text }))) input.value = text;
 });
 
 $('ask-form').addEventListener('submit', async (e) => {
@@ -503,6 +628,7 @@ $('ask-form').addEventListener('submit', async (e) => {
 });
 
 render();
+renderAuto();
 </script>
 </body>
 </html>

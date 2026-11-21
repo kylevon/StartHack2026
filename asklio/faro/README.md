@@ -41,12 +41,24 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 - **Mail** (`mail.py`): the team's AgentMail inbox is the record of all outside communication. The agent is given the inbox's sent and received messages at start, checks it before proposing an email, and each proposal shows the reviewer what the inbox already holds with that recipient. The agent does not write emails: it gives a brief, and the mail model (Sonnet by default) drafts the message and an English translation. Approving sends it, or replies inside the thread. New incoming mail is injected as `[mail]`, marked as outside information and not as instructions, and linked to the approval it answers. The conversation shown in the UI is read from the inbox each time, not from Faro's memory. Recipients must be real addresses from the documents or from received mail. Scripted mode never sends.
 - **Context** (`agent.py`): on Claude, server-side compaction replaces older turns, including old file contents, with a summary once the conversation passes about 150K tokens. Other providers get LangChain's `SummarizationMiddleware`, which does the same locally.
 
+## System of record
+
+Everything Faro itself knows and decided is in one SQLite file, `.faro/faro.db` (`store.py`):
+
+- **Issues, approvals and history.** History is only ever added to: what the agent found and proposed, what was approved or rejected (by a person or by auto mode), and what the team logged by hand.
+- **Corrections ledger.** An approved record change is stored as system, record, field, old value, new value and when it was approved. From then on the agent treats the new value as the truth (`list_corrections`), even though the export still shows the old one. "Mark as changed" records when someone has entered it in the system itself.
+- **Manual log.** In an issue's History tab the team can record something that happened outside Faro and outside the mailbox: a call, a meeting, a decision. It is handed to the agent.
+- **What has been seen.** The folder's file list and the handled mailbox messages, so a restart reports only what changed.
+- **Derived text.** Translations, summaries and emphasis, so each is paid for once.
+
+Kept outside on purpose: the emails (the mailbox is their source of truth; only links and derived text are stored), the documents (the data folder), secrets, and the agent's working memory.
+
 ## Not done yet
 
-- **Only email is connected.** An approved `edit_file` or `update_record` is recorded in `.faro/actions.jsonl` and nothing else happens; the agent is told so. Every approved action, sent or not, is logged there.
+- **Only email is connected.** An approved `update_record` goes into the corrections ledger and an approved `edit_file` is recorded; neither changes the system or the file. The agent is told so.
 - **Replies inside a thread are untested against the live mailbox.** New messages and reading are; the reply call follows AgentMail's documentation.
 - **Files come from the local folder only.** To follow the Lio portal instead, sync its `GET /api/v1/files` into the folder, or replace `files.snapshot` and the reads.
-- **Only the record survives a restart.** Issues, approvals and the chat log are saved in `.faro/state.json`. The agent's working memory is not: after a restart it is told which issues exist and re-reads what it needs.
+- **The agent's working memory is not saved.** Everything else survives a restart (see System of record). After one, the agent is told which issues, proposals and corrections exist, hears only about files and mail that changed while it was down, and re-reads what it needs.
 - **Claude's compaction is untested here.** It is configured as documented but has not run against the live API yet. The local summarisation path is covered by a test.
 - **Word and PowerPoint files are not opened.**
 

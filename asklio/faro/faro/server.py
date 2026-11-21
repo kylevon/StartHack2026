@@ -18,6 +18,18 @@ class ChatIn(BaseModel):
     text: str
 
 
+class NoteIn(BaseModel):
+    text: str = ""
+
+
+class RichIn(BaseModel):
+    texts: list[str]
+
+
+class AutoIn(BaseModel):
+    on: bool
+
+
 class DecisionIn(BaseModel):
     approved: bool
     note: str = ""
@@ -39,7 +51,9 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
 
                     mail_model = init_chat_model(config.MAIL_MODEL, max_tokens=8000)
                     hub.write_email = mail.writer(mail_model, config.BRIEF)
-                    hub.translate_mail = mail.translator(mail_model, hub.state_dir / "translations.json")
+                    hub.translate_mail = mail.translator(mail_model, hub.store.cache("translations"))
+                    hub.summarize = mail.summarizer(mail_model, hub.store.cache("summaries"))
+                    hub.emphasize = mail.emphasizer(mail_model, hub.store.cache("emphasis"))
                 except Exception as err:
                     hub.emit("error", text=f"The mail model {config.MAIL_MODEL} could not be loaded ({err}). Emails will carry the agent's brief as their text.")
                 tasks.append(asyncio.create_task(mail.watch_mail(hub, hub.mailbox, config.MAIL_POLL_SECONDS)))
@@ -88,6 +102,43 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
             raise HTTPException(400, "Empty message.")
         app.state.hub.chat(body.text.strip())
         return {"ok": True}
+
+    @app.post("/api/issues/{issue_id}/log")
+    async def log(issue_id: str, body: NoteIn):
+        hub: Hub = app.state.hub
+        if issue_id not in hub.issues:
+            raise HTTPException(404, f"No issue {issue_id}.")
+        if not body.text.strip():
+            raise HTTPException(400, "Nothing to record.")
+        hub.log_manual(issue_id, body.text)
+        return {"ok": True}
+
+    @app.post("/api/corrections/{correction_id}/applied")
+    async def applied(correction_id: int, body: NoteIn):
+        try:
+            return app.state.hub.mark_applied(correction_id, body.text)
+        except KeyError:
+            raise HTTPException(404, f"No correction {correction_id}.") from None
+
+    @app.post("/api/rich")
+    async def rich(body: RichIn):
+        """The same texts with their key facts in bold. A text that cannot be marked up comes back unchanged."""
+        hub: Hub = app.state.hub
+
+        async def one(text: str) -> str:
+            if hub.emphasize is None:
+                return text
+            try:
+                return await hub.emphasize(text)
+            except Exception:
+                return text
+
+        return {"texts": list(await asyncio.gather(*(one(text) for text in body.texts[:40])))}
+
+    @app.post("/api/auto")
+    async def auto(body: AutoIn):
+        app.state.hub.set_auto(body.on)
+        return {"ok": True, "on": app.state.hub.auto}
 
     @app.post("/api/approvals/{approval_id}")
     async def decide(approval_id: str, body: DecisionIn):

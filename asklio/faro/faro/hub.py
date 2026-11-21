@@ -11,6 +11,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .store import Store
+
 
 @dataclass
 class Issue:
@@ -44,6 +46,9 @@ class Approval:
     outcome: str = ""  # done | failed | recorded, once approved
     result: str = ""
     thread_id: str = ""  # the mail conversation an approved email started or continued
+    needs_human: bool = True  # the agent's own call; anything it did not mark stays with a person
+    human_reason: str = ""
+    auto: bool = False  # approved by auto mode, not by a person
     created: float = field(default_factory=time.time)
     decided: float | None = None
 
@@ -55,43 +60,36 @@ class Hub:
         self.events: list[dict] = []
         self.approvals: dict[str, Approval] = {}
         self.issues: dict[str, Issue] = {}
+        self.auto = False  # auto mode: carry out proposals the agent marked as not needing a person
+        self._auto_tasks: set = set()
         self.inbox: list[str] = []
         self.wake = asyncio.Event()
         self.executors: dict = {}  # tool name -> async function(approval) -> result text; tools without one are only recorded
         self.mailbox = None
         self.write_email = None  # async (to_name, language, brief, thread) -> {subject, body, translation}
         self._subscribers: set[asyncio.Queue] = set()
-        self.translate_mail = None  # async (message_id, text) -> {language, english}
-        self.restored = self._load()
-
-    # ----- the event log and the approvals survive a restart; the agent's working memory does not -----
-    @property
-    def _state_file(self) -> Path:
-        return self.state_dir / "state.json"
-
-    def _load(self) -> bool:
-        if not self._state_file.is_file():
-            return False
-        saved = json.loads(self._state_file.read_text())
-        if "issues" not in saved:  # state from before issues existed cannot be mapped onto them
-            self._state_file.replace(self.state_dir / "state-before-issues.json")
-            return False
-        self.events = saved["events"]
-        self.issues = {i["id"]: Issue(**i) for i in saved["issues"]}
-        self.approvals = {a["id"]: Approval(**a) for a in saved["approvals"]}
-        return True
-
-    def save(self) -> None:
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        scratch = self._state_file.with_suffix(".tmp")
-        scratch.write_text(json.dumps({"events": self.events, "issues": [asdict(i) for i in self.issues.values()], "approvals": [asdict(a) for a in self.approvals.values()]}, ensure_ascii=False))
-        scratch.replace(self._state_file)
+        self.translate_mail = None  # async (message_id, text) -> {language, summary, english}
+        self.summarize = None  # async (text) -> one-line summary of a history entry
+        self.emphasize = None  # async (text) -> the same words with bold and lists added
+        self.store = Store(state_dir / "faro.db")
+        if self.store.is_new:
+            self.store.import_legacy(state_dir)  # carry over the JSON files from before the database existed
+        self.events = self.store.events()
+        self.issues = {i["id"]: Issue(**i) for i in self.store.issues()}
+        self.approvals = {a["id"]: Approval(**a) for a in self.store.approvals()}
+        self.auto = self.store.setting("auto", False)
+        self.restored = bool(self.events)
+        # Record changes approved before the ledger existed belong in it too.
+        entered = {c["approval_id"] for c in self.store.corrections()}
+        for approval in self.approvals.values():
+            if approval.tool == "update_record" and approval.status == "approved" and approval.id not in entered:
+                self._enter_corrections(approval)
 
     # ----- event log, streamed to the UI -----
     def emit(self, kind: str, **data) -> dict:
         event = {"seq": len(self.events) + 1, "ts": time.time(), "kind": kind, **data}
         self.events.append(event)
-        self.save()
+        self.store.add_event(event)
         for queue in self._subscribers:
             queue.put_nowait(event)
         return event
@@ -118,10 +116,45 @@ class Hub:
         self.inject(f"[chat] {text}")
 
     # ----- issues -----
-    def _log(self, issue: Issue, kind: str, text: str, ref: str = "") -> None:
-        issue.history.append({"ts": time.time(), "kind": kind, "text": text, "ref": ref})
+    def _show(self, issue: Issue) -> None:
+        """Save an issue and tell the UI, with the corrections that belong to it."""
         issue.updated = time.time()
-        self.emit("issue", issue=asdict(issue))
+        self.store.put_issue(asdict(issue))
+        self.emit("issue", issue=asdict(issue) | {"corrections": self.store.corrections(issue.id)})
+
+    def _log(self, issue: Issue, kind: str, text: str, ref: str = "") -> None:
+        entry = {"ts": time.time(), "kind": kind, "text": text, "ref": ref}
+        issue.history.append(entry)
+        self.store.add_history(issue.id, entry)
+        self._show(issue)
+
+    def _put(self, approval: Approval) -> None:
+        self.store.put_approval(asdict(approval))
+        self.emit("approval", approval=asdict(approval))
+
+    def _enter_corrections(self, approval: Approval) -> None:
+        changes = approval.args.get("changes") or []
+        if isinstance(changes, dict):  # proposals from before the ledger carried only the new values
+            changes = [{"field": k, "old_value": "", "new_value": v} for k, v in changes.items()]
+        for change in changes:
+            self.store.add_correction(approval.id, approval.issue_id, approval.args.get("system", ""), approval.args.get("record", ""), change["field"], change.get("old_value", ""), change["new_value"])
+
+    def log_manual(self, issue_id: str, text: str) -> Issue:
+        """Something that happened outside Faro and outside the mailbox: a call, a meeting, a decision someone took."""
+        issue = self.issues[issue_id]
+        self._log(issue, "logged", text.strip())
+        self.inject(f"[log] The team recorded this on issue {issue.id} ({issue.title}): \"{text.strip()}\". It happened outside this system. Take it into account and update the issue if it changes anything.")
+        return issue
+
+    def mark_applied(self, correction_id: int, note: str = "") -> dict:
+        correction = self.store.mark_applied(correction_id, note.strip())
+        if correction is None:
+            raise KeyError(correction_id)
+        issue = self.issues[correction["issue_id"]]
+        what = f"{correction['system']} · {correction['record']} · {correction['field']}: {correction['old_value'] or '?'} → {correction['new_value']}"
+        self._log(issue, "applied", f"{what} is now changed in {correction['system']}." + (f" {note.strip()}" if note.strip() else ""), correction["approval_id"])
+        self.inject(f"[log] The team has now made this correction in {correction['system']} itself: {what} (issue {issue.id}).")
+        return correction
 
     def open_issue(self, title: str, severity: str, summary: str, evidence: list[str], next_step: str = "") -> Issue:
         issue = Issue(f"I-{len(self.issues) + 1}", title, severity, summary, evidence, next_step)
@@ -151,61 +184,85 @@ class Hub:
         return issue
 
     # ----- approvals -----
-    def propose(self, tool: str, args: dict, issue_id: str, headline: str, reason: str) -> Approval:
-        approval = Approval(f"A-{len(self.approvals) + 1}", issue_id, tool, args, headline, reason, live=tool in self.executors)
+    def propose(self, tool: str, args: dict, issue_id: str, headline: str, reason: str, needs_human: bool = True, human_reason: str = "") -> Approval:
+        approval = Approval(f"A-{len(self.approvals) + 1}", issue_id, tool, args, headline, reason, live=tool in self.executors,
+                            needs_human=needs_human, human_reason=human_reason)
         self.approvals[approval.id] = approval
-        self.emit("approval", approval=asdict(approval))
+        self._put(approval)
         self._log(self.issues[issue_id], "proposed", headline, approval.id)
+        self._run_auto()
         return approval
+
+    def set_auto(self, on: bool) -> None:
+        self.auto = on
+        self.store.set_setting("auto", on)
+        self.emit("auto", value=on)
+        self._run_auto()
+
+    def _run_auto(self) -> None:
+        """In auto mode, carry out every waiting proposal the agent itself marked as not needing a person."""
+        if not self.auto:
+            return
+        for approval in list(self.approvals.values()):
+            if approval.status == "pending" and not approval.needs_human and approval.id not in {t.get_name() for t in self._auto_tasks}:
+                task = asyncio.ensure_future(self.decide(approval.id, True, auto=True))
+                task.set_name(approval.id)
+                self._auto_tasks.add(task)
+                task.add_done_callback(self._auto_tasks.discard)
 
     def attach_reply(self, thread_id: str) -> list[Issue]:
         """Count an incoming message on the issues its conversation belongs to, so the UI shows it there."""
         linked = [i for i in self.issues.values() if thread_id and thread_id in i.thread_ids]
         for issue in linked:
             issue.replies += 1
-            issue.updated = time.time()
-            self.emit("issue", issue=asdict(issue))
+            self._show(issue)
         return linked
 
-    async def decide(self, approval_id: str, approved: bool, note: str = "") -> Approval:
+    async def decide(self, approval_id: str, approved: bool, note: str = "", auto: bool = False) -> Approval:
         approval = self.approvals[approval_id]
         issue = self.issues[approval.issue_id]
         if approval.status != "pending":
             raise ValueError(f"{approval_id} was already {approval.status}.")
         approval.status = "approved" if approved else "rejected"  # set before any await, so a second click cannot act twice
         approval.note = note.strip()
+        approval.auto = auto
         approval.decided = time.time()
+        by = "automatically, under auto mode, without a person reading it" if auto else "by the reviewer"
         note_text = f' Reviewer\'s note: "{approval.note}"' if approval.note else ""
         label = f"{approval.id} on issue {issue.id} ({approval.tool}: {approval.headline})"
         said = f" Note: {approval.note}" if approval.note else ""
         if not approved:
-            self.emit("approval", approval=asdict(approval))
+            self._put(approval)
             self._log(issue, "rejected", f"{approval.headline}.{said}", approval.id)
             self.inject(f"[approval] {label} was REJECTED. It will not happen.{note_text} Update the issue's next step.")
             return approval
         execute = self.executors.get(approval.tool)
-        if execute is None:
+        if approval.tool == "update_record":
+            # No system is connected, so the decision goes into the corrections ledger: what the record should say, and since when.
+            self._enter_corrections(approval)
+            approval.outcome = "recorded"
+            approval.result = f"Entered in the corrections ledger. It is not changed in {approval.args.get('system') or 'the system'} itself until someone does that there."
+            told = f"was APPROVED {by} and entered in the corrections ledger.{note_text} Treat the corrected values as the truth from now on, although the exports still show the old ones. Nobody has changed {approval.args.get('system') or 'the system'} itself yet."
+            kind = "auto_approved" if auto else "approved"
+        elif execute is None:
             approval.outcome = "recorded"
             approval.result = "Recorded in the action log. This kind of action is not connected to an outside system yet."
-            told = f"was APPROVED and recorded.{note_text} It is not connected to an outside system yet, so do not wait for an effect."
-            kind = "approved"
+            told = f"was APPROVED {by} and recorded.{note_text} It is not connected to an outside system yet, so do not wait for an effect."
+            kind = "auto_approved" if auto else "approved"
         else:
             try:
                 approval.result = await execute(approval)
                 approval.outcome = "done"
-                told = f"was APPROVED and carried out. {approval.result}{note_text}"
-                kind = "sent"
+                told = f"was APPROVED {by} and carried out. {approval.result}{note_text}"
+                kind = "auto_sent" if auto else "sent"
                 if approval.thread_id and approval.thread_id not in issue.thread_ids:
                     issue.thread_ids.append(approval.thread_id)
             except Exception as err:
                 approval.outcome = "failed"
                 approval.result = f"{type(err).__name__}: {err}"
-                told = f"was APPROVED but FAILED: {approval.result}.{note_text} Nothing went out. Fix the cause and propose it again if it is still needed."
+                told = f"was APPROVED {by} but FAILED: {approval.result}.{note_text} Nothing went out. Fix the cause and propose it again if it is still needed."
                 kind = "failed"
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        with (self.state_dir / "actions.jsonl").open("a") as log:
-            log.write(json.dumps(asdict(approval), ensure_ascii=False) + "\n")
-        self.emit("approval", approval=asdict(approval))
+        self._put(approval)
         self._log(issue, kind, f"{approval.headline}.{said}" + (f" {approval.result}" if kind == "failed" else ""), approval.id)
         self.inject(f"[approval] {label} {told} Update the issue's next step.")
         return approval

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from . import files, mail
 from .hub import Hub
 
-READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail"}
+READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail", "list_corrections"}
 
 Severity = Literal["blocker", "risk", "info"]
 
@@ -42,6 +42,8 @@ class Proposal(BaseModel):
     issue_id: str = Field(description="The issue this action is for. Open one first if there is none.")
     headline: str = Field(description="The action in a few words, e.g. 'Ask the supplier how many were shipped'.")
     reason: str = Field(description="Why this action, to this recipient, now. The issue already explains the problem; do not repeat it.")
+    needs_human: bool = Field(description="Whether a person has to decide this. True for anything that commits money or goods, places, changes or cancels an order, accepts, promises or concedes something, goes to someone for a decision, or that you are unsure about. False only for asking for information or status, confirming receipt, chasing an answer already asked for, or bringing a record in line with something already confirmed in writing at no cost. With auto mode on, false means it is carried out at once without anyone reading it.")
+    human_reason: str = Field(description="One line: why a person must decide this, or why it is safe to go ahead without one.")
 
 
 class SendEmail(Proposal):
@@ -50,7 +52,7 @@ class SendEmail(Proposal):
     cc: list[str] = Field(default_factory=list, description="Further addresses to copy, under the same rule.")
     reply_to_message_id: str = Field(default="", description="To answer inside an existing thread, the message_id of the message being answered (from list_mail or read_mail). Leave empty for a new conversation.")
     language: str = Field(description="Language the recipient should be written to in, e.g. 'Polish'.")
-    brief: str = Field(description="Everything the email has to say, for the writer who drafts it and knows nothing else: the facts with their numbers and references, what you are asking for, by when, and anything the tone should take into account. Write it in English.")
+    brief: str = Field(description="Everything the email has to say, for the writer who drafts it and knows nothing else: the facts with their numbers and references, what you are asking for, by when, and anything the tone should take into account. Write it in English. Include only facts you have read in a file or a message; never supply an address, number or name from memory.")
 
 
 class EditFile(Proposal):
@@ -59,10 +61,16 @@ class EditFile(Proposal):
     replace: str = Field(description="Text to put in its place.")
 
 
+class Change(BaseModel):
+    field: str = Field(description="The field to change, as the system names it.")
+    old_value: str = Field(description="What the system holds now, exactly as the export shows it.")
+    new_value: str = Field(description="What it should hold.")
+
+
 class UpdateRecord(Proposal):
     system: str = Field(description="System that holds the record: an ERP, a CRM, a database, a tracker.")
     record: str = Field(description="Which record: its type and key, e.g. 'purchase order 4500001234'.")
-    changes: dict[str, str] = Field(description="Field name to new value. Put the old value in the reason.")
+    changes: list[Change] = Field(description="One entry per field. Once approved, each goes into the corrections ledger as the value to trust.")
 
 
 def make_tools(hub: Hub) -> list:
@@ -115,9 +123,9 @@ def make_tools(hub: Hub) -> list:
     def queue(name: str, proposal: Proposal) -> str:
         if error := unknown(proposal.issue_id):
             return error
-        args = proposal.model_dump(exclude={"issue_id", "headline", "reason"})
-        approval = hub.propose(name, args, proposal.issue_id, proposal.headline, proposal.reason)
-        return f"Queued as {approval.id}. Not done yet: a person has to approve it. Carry on with other work; the decision arrives as an [approval] message."
+        args = proposal.model_dump(exclude={"issue_id", "headline", "reason", "needs_human", "human_reason"})
+        approval = hub.propose(name, args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason)
+        return f"Queued as {approval.id}. Whether it is done is not decided yet. Carry on with other work; the outcome arrives as an [approval] message."
 
     @tool(args_schema=SendEmail)
     async def send_email(**kwargs) -> str:
@@ -145,12 +153,12 @@ def make_tools(hub: Hub) -> list:
                 draft = await hub.write_email(proposal.to_name, proposal.language, proposal.brief, thread)
             except Exception as err:
                 return f"Error: the email could not be drafted ({type(err).__name__}: {err}). Try again."
-        args = proposal.model_dump(exclude={"issue_id", "headline", "reason"}) | draft | {"earlier": earlier}
-        approval = hub.propose("send_email", args, proposal.issue_id, proposal.headline, proposal.reason)
+        args = proposal.model_dump(exclude={"issue_id", "headline", "reason", "needs_human", "human_reason"}) | draft | {"earlier": earlier}
+        approval = hub.propose("send_email", args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason)
         note = ""
         if earlier:
             note = f" Note: the mailbox already holds {len(earlier)} message(s) with this recipient, the latest {earlier[0]['direction']} \"{earlier[0]['subject']}\" (thread {earlier[0]['thread_id']}). The reviewer sees them next to your proposal. If this one repeats something already sent, say so with tell_team so it can be rejected."
-        return f"Queued as {approval.id} with the subject \"{draft['subject']}\". Not sent yet: a person has to approve it. Carry on with other work; the decision arrives as an [approval] message.{note}"
+        return f"Queued as {approval.id} with the subject \"{draft['subject']}\". Whether it is sent is not decided yet. Carry on with other work; the outcome arrives as an [approval] message.{note}"
 
     @tool(args_schema=EditFile)
     async def edit_file(**kwargs) -> str:
@@ -166,16 +174,24 @@ def make_tools(hub: Hub) -> list:
 
     @tool(args_schema=UpdateRecord)
     async def update_record(**kwargs) -> str:
-        """Propose a change to a record in a business system or database: a quantity, a status, a master-data field. Needs human approval before it is posted."""
+        """Propose a correction to a record in a business system or database: a quantity, a status, a master-data field. Once approved it is entered in the corrections ledger as the value to trust; the system itself is changed by a person."""
         return queue("update_record", UpdateRecord(**kwargs))
 
     @tool
     async def tell_team(message: str) -> str:
-        """Say something to the team in the chat while you keep working: the answer to a [chat] question, or a finding that has nobody to email. Plain text, a few sentences at most. This is the only way your words reach the chat in the middle of a task."""
+        """Say something to the team in the chat while you keep working: the answer to a [chat] question, or a finding that has nobody to email. A few sentences at most, with the key facts in **bold**. This is the only way your words reach the chat in the middle of a task."""
         hub.emit("agent", text=message.strip())
         return "Shown in the chat."
 
-    tools = [list_files, read_file, search_files, open_issue, update_issue, tell_team, send_email, edit_file, update_record]
+    @tool
+    async def list_corrections() -> str:
+        """The corrections ledger: record changes the team has approved. A corrected value is the truth even while the exports still show the old one."""
+        rows = hub.store.corrections()
+        if not rows:
+            return "The ledger is empty: no record has been corrected, so the exports stand as they are."
+        return "\n".join(f"{c['system']} | {c['record']} | {c['field']}: {c['old_value'] or '?'} -> {c['new_value']} | issue {c['issue_id']} | {'changed in the system' if c['applied_at'] else 'approved, not yet changed in the system'}" for c in rows)
+
+    tools = [list_files, read_file, search_files, list_corrections, open_issue, update_issue, tell_team, send_email, edit_file, update_record]
     if hub.mailbox is not None:
 
         @tool

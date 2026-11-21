@@ -52,12 +52,12 @@ async def test_agent_reads_proposes_and_hears_the_decision(folder, tmp_path):
         thought = next(e for e in hub.events if e["kind"] == "thought")
         assert len(thought["label"]) <= 150 < len(thought["text"])  # shown short, full text kept
         assert any(e["kind"] == "step" and "Reading the first document" in e["label"] for e in hub.events)
-        assert not (tmp_path / "state" / "actions.jsonl").exists()  # nothing happens before a person approves
+        assert approval.outcome == ""  # nothing happens before a person approves
 
         await hub.decide("A-1", approved=True, note="ok")
         await until(lambda: any(e["kind"] == "agent" and "decision noted" in e["text"] for e in hub.events))
-        logged = json.loads((tmp_path / "state" / "actions.jsonl").read_text())
-        assert logged["id"] == "A-1" and logged["status"] == "approved" and logged["outcome"] == "recorded"
+        logged = Hub(folder, tmp_path / "state").approvals["A-1"]  # read back from the database
+        assert logged.status == "approved" and logged.outcome == "recorded"
         assert hub.issues["I-1"].history[-1]["kind"] == "approved"  # the decision is part of the issue's history
 
         hub.chat("are we fine?")
@@ -73,10 +73,10 @@ async def test_agent_reads_proposes_and_hears_the_decision(folder, tmp_path):
 
 async def test_rejection_is_not_logged_and_cannot_be_decided_twice(folder, tmp_path):
     hub = Hub(folder, tmp_path / "state")
-    hub.propose("update_record", {"system": "SAP", "record": "x", "changes": {"qty": "8000"}}, hub.open_issue("h", "risk", "s", []).id, "h", "r")
+    hub.propose("update_record", {"system": "SAP", "record": "x", "changes": [{"field": "qty", "old_value": "80000", "new_value": "8000"}]}, hub.open_issue("h", "risk", "s", []).id, "h", "r")
     await hub.decide("A-1", approved=False, note="wrong batch")
     assert "REJECTED" in hub.inbox[-1] and "wrong batch" in hub.inbox[-1]
-    assert not (tmp_path / "state" / "actions.jsonl").exists()
+    assert Hub(folder, tmp_path / "state").approvals["A-1"].status == "rejected" and not hub.store.corrections()
     with pytest.raises(ValueError):
         await hub.decide("A-1", approved=True)
 
@@ -236,7 +236,7 @@ async def test_agent_cannot_propose_mail_to_a_made_up_address(folder, tmp_path):
     hub = Hub(folder, tmp_path / "state")
     send_email = next(t for t in make_tools(hub) if t.name == "send_email")
     hub.open_issue("t", "risk", "s", [])
-    base = {"issue_id": "I-1", "headline": "h", "reason": "r", "to_name": "Head of Procurement", "brief": "Subject line\n\nBody text.", "language": "English"}
+    base = {"issue_id": "I-1", "headline": "h", "reason": "r", "needs_human": True, "human_reason": "x", "to_name": "Head of Procurement", "brief": "Subject line\n\nBody text.", "language": "English"}
     assert "Error" in await send_email.ainvoke(base | {"to": ["Head of Procurement"]})
     assert not hub.approvals
     assert "Queued as A-1" in await send_email.ainvoke(base | {"to": ["m.vogt@soony.example"]})
@@ -271,7 +271,7 @@ async def test_email_is_drafted_by_the_mail_model_and_checked_against_the_mailbo
     hub.write_email = mail.writer(RunnableLambda(fake_sonnet), "We are the procurement team.")
     send_email = next(t for t in make_tools(hub) if t.name == "send_email")
     hub.open_issue("t", "risk", "s", [])
-    result = await send_email.ainvoke({"issue_id": "I-1", "headline": "h", "reason": "r", "to": ["a.nowak@supplier.example"],
+    result = await send_email.ainvoke({"issue_id": "I-1", "headline": "h", "reason": "r", "needs_human": True, "human_reason": "x", "to": ["a.nowak@supplier.example"],
                                        "to_name": "A. Nowak, Karton Nowak", "language": "Polish", "brief": "Ask how many pieces were shipped on WZ-1."})
     args = hub.approvals["A-1"].args
     assert args["subject"] == "Potwierdzenie ilości" and args["body"].startswith("Dzień dobry") and args["translation"].startswith("Hello")
@@ -329,7 +329,7 @@ def test_files_can_be_looked_at_in_the_browser(folder):
 
 async def test_approvals_survive_a_restart_and_the_agent_is_told(folder, tmp_path):
     hub = Hub(folder, tmp_path / "state")
-    hub.propose("update_record", {"system": "SAP", "record": "x", "changes": {"qty": "8000"}}, hub.open_issue("Receipt overstated", "blocker", "s", []).id, "Receipt overstated", "r")
+    hub.propose("update_record", {"system": "SAP", "record": "x", "changes": [{"field": "qty", "old_value": "80000", "new_value": "8000"}]}, hub.open_issue("Receipt overstated", "blocker", "s", []).id, "Receipt overstated", "r")
     await hub.decide("A-1", approved=True)
 
     again = Hub(folder, tmp_path / "state")  # a new process
@@ -337,7 +337,7 @@ async def test_approvals_survive_a_restart_and_the_agent_is_told(folder, tmp_pat
     assert [h["kind"] for h in again.issues["I-1"].history] == ["found", "proposed", "approved"]
     watcher = asyncio.create_task(watch_folder(again, 0.05))
     try:
-        await until(lambda: len(again.inbox) >= 2)
+        await until(lambda: again.inbox)
         assert "Do not open or propose these again" in again.inbox[0] and "I-1 [open, blocker] Receipt overstated" in again.inbox[0] and "A-1 [approved, recorded] update_record: Receipt overstated" in again.inbox[0]
     finally:
         watcher.cancel()
@@ -355,9 +355,9 @@ async def test_each_message_is_translated_once_and_remembered(folder, tmp_path):
 
     def fake_sonnet(messages):
         calls.append(messages[1][1])
-        return AIMessage("LANGUAGE: English\nENGLISH:\nSAME" if "Hello" in messages[1][1] else "LANGUAGE: Polish\nENGLISH:\nWe have 8,000 pieces in stock.")
+        return AIMessage("LANGUAGE: English\nSUMMARY: Asks how many.\nENGLISH:\nSAME" if "Hello" in messages[1][1] else "LANGUAGE: Polish\nSUMMARY: They hold 8,000 pieces.\nENGLISH:\nWe have 8,000 pieces in stock.")
 
-    cache = tmp_path / "state" / "translations.json"
+    cache = {}
     inbox_messages = [
         {"message_id": "<pl>", "thread_id": "t1", "labels": ["received"], "from": "A. Nowak <a.nowak@supplier.example>", "to": ["team@agentmail.to"], "timestamp": "2026-11-21T16:39:00Z", "text": "Mamy 8 000 szt."},
         {"message_id": "<en>", "thread_id": "t1", "labels": ["sent"], "from": "Team <team@agentmail.to>", "to": ["a.nowak@supplier.example"], "timestamp": "2026-11-21T16:35:00Z", "text": "Hello, how many?"},
@@ -372,7 +372,7 @@ async def test_each_message_is_translated_once_and_remembered(folder, tmp_path):
     hub.translate_mail = mail.translator(RunnableLambda(fake_sonnet), cache)
     view = await mail.thread_view(hub, box, "t1")
     received, sent = view["messages"]
-    assert received["direction"] == "received" and received["language"] == "Polish" and received["english"] == "We have 8,000 pieces in stock."
+    assert received["direction"] == "received" and received["language"] == "Polish" and received["english"] == "We have 8,000 pieces in stock." and received["summary"] == "They hold 8,000 pieces."
     assert sent["direction"] == "sent" and sent["english"] == ""  # already English: no second tab
     await mail.thread_view(hub, box, "t1")
     assert len(calls) == 2  # the second look cost nothing
@@ -387,8 +387,8 @@ async def test_an_issue_carries_its_whole_story(folder, tmp_path):
     hub = Hub(folder, tmp_path / "state")
     tools = {t.name: t for t in make_tools(hub)}
     assert "Opened as I-1" in await tools["open_issue"].ainvoke({"title": "Art books 5,900 short", "severity": "blocker", "summary": "Receipt overstated.", "evidence": ["erp.csv"]})
-    assert "no issue 'I-9'" in await tools["update_record"].ainvoke({"issue_id": "I-9", "headline": "h", "reason": "r", "system": "SAP", "record": "x", "changes": {"qty": "8000"}})
-    await tools["update_record"].ainvoke({"issue_id": "I-1", "headline": "Correct the receipt", "reason": "r", "system": "SAP", "record": "x", "changes": {"qty": "8000"}})
+    assert "no issue 'I-9'" in await tools["update_record"].ainvoke({"issue_id": "I-9", "headline": "h", "reason": "r", "needs_human": True, "human_reason": "x", "system": "SAP", "record": "x", "changes": [{"field": "qty", "old_value": "80000", "new_value": "8000"}]})
+    await tools["update_record"].ainvoke({"issue_id": "I-1", "headline": "Correct the receipt", "reason": "r", "needs_human": True, "human_reason": "x", "system": "SAP", "record": "x", "changes": [{"field": "qty", "old_value": "80000", "new_value": "8000"}]})
     await hub.decide("A-1", approved=False, note="wrong batch")
     await tools["update_issue"].ainvoke({"issue_id": "I-1", "note": "Supplier confirmed 8,000.", "next_step": "Paul Winter must send the call-off", "thread_id": "t7", "evidence": ["context/notes.md"]})
     issue = hub.issues["I-1"]
@@ -425,3 +425,175 @@ async def test_history_merges_faro_entries_and_mail_in_time_order(folder, tmp_pa
     hub.mailbox = mail.Mailbox("team@agentmail.to", "k", broken)
     degraded = await mail.issue_history(hub, issue)
     assert [e["kind"] for e in degraded["entries"]] == ["found", "note"] and "could not be read" in degraded["problem"]
+
+
+async def test_long_history_entries_get_a_cached_one_line_summary(folder, tmp_path):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    from faro import mail
+
+    calls = []
+
+    def fake_sonnet(messages):
+        calls.append(messages[1][1])
+        return AIMessage("Receipt overstated by **72,000**.")
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.summarize = mail.summarizer(RunnableLambda(fake_sonnet), hub.store.cache("summaries"))
+    issue = hub.open_issue("Art books short", "blocker", "Goods receipt 5000413065 was booked as 80,000 art books although the delivery note was corrected by hand to 8,000, so stock is overstated by 72,000.", [])
+    hub.update_issue("I-1", "Supplier confirmed.")
+    first = (await mail.issue_history(hub, issue))["entries"]
+    assert first[0]["summary"] == "Receipt overstated by **72,000**." and first[1]["summary"] == ""  # the short note is its own summary
+    await mail.issue_history(hub, issue)
+    assert len(calls) == 1
+
+
+async def test_auto_mode_carries_out_only_what_the_agent_marked_routine(folder, tmp_path):
+    sent = []
+
+    async def send(approval):
+        sent.append(approval.id)
+        return "Sent."
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.executors["send_email"] = send
+    issue = hub.open_issue("Cards late", "risk", "s", [])
+    waiting = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Ask for flight status", "r", needs_human=False, human_reason="Only a question.")
+    await asyncio.sleep(0.05)
+    assert waiting.status == "pending" and sent == []  # auto mode is off: nothing moves
+
+    hub.set_auto(True)
+    await until(lambda: waiting.status == "approved")
+    assert sent == ["A-1"] and waiting.auto and issue.history[-1]["kind"] == "auto_sent"
+    assert "automatically, under auto mode" in hub.inbox[-1]
+
+    order = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Place the call-off", "r", needs_human=True, human_reason="Commits EUR 16,800.")
+    routine = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Chase the answer", "r", needs_human=False, human_reason="A reminder.")
+    await until(lambda: routine.status == "approved")
+    assert order.status == "pending" and sent == ["A-1", "A-3"]  # the order still waits for a person
+
+    again = Hub(folder, tmp_path / "state")
+    assert again.auto and again.approvals["A-2"].needs_human  # the switch survives a restart
+    hub.set_auto(False)
+    late = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Another question", "r", needs_human=False, human_reason="q")
+    await asyncio.sleep(0.05)
+    assert late.status == "pending"
+
+
+def test_proposals_from_before_auto_mode_stay_with_a_person(folder, tmp_path):
+    from faro.hub import Approval
+
+    assert Approval("A-1", "I-1", "send_email", {}, "h", "r").needs_human
+
+
+async def test_emphasis_never_changes_the_words(folder, tmp_path):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    from faro import mail
+
+    text = "Stock is 19,300 against 25,200 needed. Paul Winter must send the call-off, Katrin Jansen must book a dock slot."
+    good = "Stock is **19,300** against 25,200 needed.\n- **Paul Winter** must send the call-off,\n- Katrin Jansen must book a dock slot."
+    answers = iter([good, "Stock is **19,300**, far too low. Someone must act."])
+    emphasize = mail.emphasizer(RunnableLambda(lambda messages: AIMessage(next(answers))), {})
+    assert await emphasize(text) == good and await emphasize(text) == good  # cached: the model is asked once
+    other = text + " Today."
+    assert await emphasize(other) == other  # a rewording is rejected and the original kept
+
+
+async def test_an_approved_correction_enters_the_ledger_and_can_be_marked_applied(folder, tmp_path):
+    from faro.tools import make_tools
+
+    hub = Hub(folder, tmp_path / "state")
+    tools = {t.name: t for t in make_tools(hub)}
+    assert "ledger is empty" in await tools["list_corrections"].ainvoke({})
+    await tools["open_issue"].ainvoke({"title": "Art books short", "severity": "blocker", "summary": "s", "evidence": []})
+    await tools["update_record"].ainvoke({"issue_id": "I-1", "headline": "Correct the receipt", "reason": "r", "needs_human": True, "human_reason": "x", "system": "SAP",
+                                          "record": "goods receipt 5000413065", "changes": [{"field": "quantity", "old_value": "80000", "new_value": "8000"}]})
+    assert hub.store.corrections() == []  # proposing changes nothing
+    await hub.decide("A-1", approved=True)
+    (row,) = hub.store.corrections("I-1")
+    assert (row["system"], row["field"], row["old_value"], row["new_value"], row["applied_at"]) == ("SAP", "quantity", "80000", "8000", None)
+    assert "corrections ledger" in hub.inbox[-1] and "80000 -> 8000" in await tools["list_corrections"].ainvoke({})
+    assert "not yet changed in the system" in await tools["list_corrections"].ainvoke({})
+
+    hub.mark_applied(row["id"], "Keyed in by Nils.")
+    assert hub.store.corrections()[0]["applied_at"] and hub.issues["I-1"].history[-1]["kind"] == "applied" and "Keyed in by Nils." in hub.issues["I-1"].history[-1]["text"]
+    assert "[log]" in hub.inbox[-1]
+    issue_event = [e for e in hub.events if e["kind"] == "issue"][-1]
+    assert issue_event["issue"]["corrections"][0]["applied_note"] == "Keyed in by Nils."  # the UI gets the ledger with the issue
+
+    again = Hub(folder, tmp_path / "state")
+    assert again.store.corrections()[0]["new_value"] == "8000" and [h["kind"] for h in again.issues["I-1"].history] == ["found", "proposed", "approved", "applied"]
+
+
+async def test_the_team_can_log_what_happened_outside_faro(folder, tmp_path):
+    hub = Hub(folder, tmp_path / "state")
+    hub.open_issue("Art books short", "blocker", "s", [])
+    hub.log_manual("I-1", " Called Paul Winter, he sends the call-off tonight. ")
+    entry = hub.issues["I-1"].history[-1]
+    assert entry["kind"] == "logged" and entry["text"] == "Called Paul Winter, he sends the call-off tonight."
+    assert hub.inbox[-1].startswith("[log]") and "outside this system" in hub.inbox[-1]
+    assert Hub(folder, tmp_path / "state").issues["I-1"].history[-1]["kind"] == "logged"
+
+
+async def test_a_restart_announces_only_what_changed_in_folder_and_mailbox(folder, tmp_path):
+    from faro import mail
+
+    hub = Hub(folder, tmp_path / "state")
+    watcher = asyncio.create_task(watch_folder(hub, 0.02))
+    await until(lambda: any("Start your review" in m for m in hub.inbox))
+    watcher.cancel()
+    hub.open_issue("Something", "risk", "s", [])
+    (folder / "arrived_while_down.txt").write_text("late")
+
+    again = Hub(folder, tmp_path / "state")  # the next process
+    watcher = asyncio.create_task(watch_folder(again, 0.02))
+    try:
+        await until(lambda: len(again.inbox) >= 2)
+        assert again.inbox[0].startswith("[state]") and "I-1" in again.inbox[0] and "Start your review" not in "".join(again.inbox)
+        assert "1 new" in again.inbox[1] and "arrived_while_down.txt" in again.inbox[1]
+    finally:
+        watcher.cancel()
+
+    old = {"message_id": "<old>", "thread_id": "t1", "labels": ["received"], "from": "A <a@x.example>", "to": ["team@agentmail.to"], "subject": "old", "timestamp": "2026-11-21T10:00:00Z", "text": "old"}
+    new = {"message_id": "<new>", "thread_id": "t1", "labels": ["received"], "from": "A <a@x.example>", "to": ["team@agentmail.to"], "subject": "new", "timestamp": "2026-11-21T11:00:00Z", "text": "came in while Faro was down"}
+    box = mail.Mailbox("team@agentmail.to", "test-key", fake_mail_service([], [old]))
+    first = asyncio.create_task(mail.watch_mail(again, box, 0.02))
+    await until(lambda: again.store.seen_mail() == {"<old>"})
+    first.cancel()
+    third = Hub(folder, tmp_path / "state")  # and the process after that
+    box = mail.Mailbox("team@agentmail.to", "test-key", fake_mail_service([], [new, old]))
+    second = asyncio.create_task(mail.watch_mail(third, box, 0.02))
+    try:
+        await until(lambda: any("came in while Faro was down" in m for m in third.inbox))
+        assert not any("A new message arrived" in m and "\n\nold" in m for m in third.inbox)  # the old one is not news again
+    finally:
+        second.cancel()
+
+
+def test_the_json_files_from_before_the_database_are_imported_once(folder, tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    issue = {"id": "I-1", "title": "Old issue", "severity": "risk", "summary": "s", "evidence": [], "next_step": "", "status": "open", "thread_ids": ["t1"], "replies": 1,
+             "history": [{"ts": 1.0, "kind": "found", "text": "s", "ref": ""}], "created": 1.0, "updated": 1.0}
+    approval = {"id": "A-1", "issue_id": "I-1", "tool": "send_email", "args": {}, "headline": "h", "reason": "r"}
+    (state / "state.json").write_text(json.dumps({"auto": True, "events": [{"seq": 1, "ts": 1.0, "kind": "agent", "text": "hello"}], "issues": [issue], "approvals": [approval]}))
+    (state / "translations.json").write_text(json.dumps({"<m>": {"v": 2, "language": "Polish", "summary": "s", "english": "e"}}))
+    hub = Hub(folder, state)
+    assert hub.restored and hub.auto and hub.issues["I-1"].replies == 1 and hub.approvals["A-1"].needs_human and hub.events[0]["text"] == "hello"
+    assert hub.store.cache("translations")["<m>"]["english"] == "e"
+    assert not (state / "state.json").exists() and (state / "state-imported-into-faro-db.json").exists()
+
+
+def test_a_record_change_approved_before_the_ledger_is_entered_at_start(folder, tmp_path):
+    hub = Hub(folder, tmp_path / "state")
+    hub.open_issue("Old", "risk", "s", [])
+    old = hub.propose("update_record", {"system": "SAP", "record": "GR 1", "changes": {"quantity": "8000"}}, "I-1", "h", "r")
+    old.status = "approved"
+    hub.store.put_approval(__import__("dataclasses").asdict(old))
+    again = Hub(folder, tmp_path / "state")
+    (row,) = again.store.corrections()
+    assert (row["approval_id"], row["field"], row["old_value"], row["new_value"]) == ("A-1", "quantity", "", "8000")
+    assert len(Hub(folder, tmp_path / "state").store.corrections()) == 1  # and only once
