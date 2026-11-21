@@ -33,15 +33,47 @@ a{color:var(--accent)}
 
 .left{display:flex;flex-direction:column;min-height:0;padding:0 16px 0 12px}
 .left-list{flex:1;min-height:0;overflow:auto;padding:26px 6px 18px 0;margin-right:-6px;display:flex;flex-direction:column;gap:18px}
-.auto{flex:none;border-top:1px solid var(--hair);padding:14px 6px 18px}
-.auto-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.auto b{font-size:14.5px;font-weight:600}
-.auto p{font-size:12px;color:var(--muted);line-height:1.4;margin-top:6px}
+.auto{flex:none;border-top:1px solid var(--hair);padding:12px 0 16px}
+.setbtn{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:14px;background:transparent;padding:9px 10px;text-align:left}
+.setbtn:hover{background:rgba(29,29,31,.05)}
+.setbtn svg,.set-nav svg{width:18px;height:18px;flex:none;color:var(--ink-2)}
+.setbtn b{display:block;font-size:14.5px;font-weight:600}
+.setbtn span{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .switch{flex:none;position:relative;width:46px;height:28px;border:0;border-radius:999px;background:rgba(29,29,31,.16);padding:0;transition:background .18s ease}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--hi);transition:transform .18s ease}
 .switch[aria-checked="true"]{background:var(--accent)}
 .switch[aria-checked="true"]::after{transform:translateX(18px)}
-.auto .row{display:flex;gap:8px;margin-top:10px}
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(29,29,31,.32);display:grid;place-items:center;padding:16px}
+.sheet{width:min(940px,100%);height:min(660px,100%);background:var(--hi);border-radius:24px;box-shadow:0 30px 80px rgba(29,29,31,.3);display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--hair)}
+.sheet-head b{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.sheet-x{border:0;background:transparent;font-size:24px;line-height:1;color:var(--muted);width:34px;height:34px;border-radius:10px}
+.sheet-x:hover{background:rgba(29,29,31,.06);color:var(--ink)}
+.sheet-body{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:0}
+.set-nav{border-right:1px solid var(--hair);padding:14px 12px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+.set-nav button{display:flex;align-items:center;gap:11px;border:0;border-radius:12px;background:transparent;padding:9px 11px;font-size:14.5px;font-weight:500;color:var(--ink-2);text-align:left}
+.set-nav button:hover{background:rgba(29,29,31,.05)}
+.set-nav button.on{background:rgba(29,29,31,.08);color:var(--ink);font-weight:600}
+.set-pane{overflow:auto;padding:22px 26px 28px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.set-pane h3{font-size:19px;font-weight:700;letter-spacing:-.015em}
+.set-pane .lead{font-size:14px;color:var(--muted);margin-top:4px;max-width:60ch}
+.set-row{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:16px 0;border-top:1px solid var(--hair)}
+.set-row:first-of-type{border-top:0;padding-top:4px}
+.set-row b{font-size:15px;font-weight:600}
+.set-row p{font-size:13.5px;color:var(--muted);margin-top:4px;max-width:58ch}
+.set-row .row{display:flex;gap:8px;margin-top:10px}
+.set-in{font:inherit;font-size:14px;border:1px solid var(--hair);border-radius:10px;padding:8px 11px;background:var(--bg);color:var(--ink);min-width:0;width:100%}
+.obj{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0}
+.obj .n{font-size:13px;font-weight:700;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.icon-btn{border:0;background:transparent;border-radius:8px;width:30px;height:30px;font-size:15px;line-height:1;color:var(--muted)}
+.icon-btn:hover:not(:disabled){background:rgba(29,29,31,.07);color:var(--ink)}
+.icon-btn:disabled{opacity:.3;cursor:default}
+.sup{border:1px solid var(--hair);border-radius:16px;padding:14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sup label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:600;color:var(--muted);min-width:0}
+.sup .wide{grid-column:1 / -1}
+.sup-foot{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.addline{display:flex;gap:10px}
+@media (max-width:700px){.sheet-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.set-nav{flex-direction:row;border-right:0;border-bottom:1px solid var(--hair);overflow-x:auto}.sup{grid-template-columns:minmax(0,1fr)}}
 .auto .btn{padding:7px 14px;font-size:13px}
 .brand{padding:0 6px 4px}
 .brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
@@ -253,6 +285,7 @@ button.tl-line:hover .chev{color:var(--ink)}
   </aside>
   <button class="fab" id="chat-open">Chat</button>
 </div>
+<div class="scrim" id="settings" hidden></div>
 
 <script>
 const issues = new Map();       // id -> issue, in arrival order
@@ -265,7 +298,8 @@ const msgLang = new Map();      // message or draft key -> 'orig' when the reade
 const sheetOpen = new Map();    // file path -> sheet index
 const expanded = new Set();     // history entries the reader opened in full
 let shownPlace = '';
-let autoOn = false, autoAsk = false;   // auto mode, and whether the page is asking to confirm switching it on
+let settings = { auto: false, aggressive: false, objectives: [], suppliers: [] };   // what the team controls
+let settingsOpen = false, settingsTab = 'objectives', autoAsk = false;
 let historyData = null;         // { id, entries, problem } for the issue on screen
 
 const $ = (id) => document.getElementById(id);
@@ -349,11 +383,54 @@ function renderLeft() {
       : '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>');
 }
 
-function renderAuto() {
-  $('auto').innerHTML = '<div class="auto-row"><b>Auto mode</b><button class="switch" id="auto-switch" role="switch" aria-checked="' + autoOn + '" aria-label="Auto mode"></button></div>' +
-    (autoAsk ? '<p>Emails and actions the agent marks as routine will go out without you reading them first. Anything that commits money or places an order still waits for you.</p><div class="row"><button class="btn btn-primary" data-auto="1">Turn on</button><button class="btn" data-auto="cancel">Cancel</button></div>'
-      : '<p>' + (autoOn ? 'On. Routine emails and actions go ahead without asking. Anything the agent marks as needing a person still waits here.' : 'Off. Every email and action waits for your approval.') + '</p>');
+const ICON = {
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  target: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3.4"/><circle cx="10" cy="10" r=".6" fill="currentColor"/></svg>',
+  people: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7.5" cy="7" r="2.6"/><path d="M2.8 16c.5-2.7 2.3-4.2 4.7-4.2s4.2 1.5 4.7 4.2M13.2 4.6a2.6 2.6 0 010 4.8M14.6 11.9c1.4.5 2.3 1.8 2.6 4.1"/></svg>',
+  bolt: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5L4.5 11.2h4.4L8 17.5l7-9h-4.5z"/></svg>',
+};
+const TABS = [['objectives', 'Objectives', 'target'], ['suppliers', 'Suppliers', 'people'], ['automation', 'Automation', 'bolt']];
+
+function renderAuto() {   // the settings button at the bottom of the left column
+  const modes = [settings.auto ? 'Auto mode on' : '', settings.aggressive ? 'Aggressive mode on' : ''].filter(Boolean).join(' · ');
+  $('auto').innerHTML = '<button class="setbtn" id="open-settings">' + ICON.gear + '<span style="min-width:0"><b>Settings</b><span>' + (modes || settings.objectives.length + (settings.objectives.length === 1 ? ' objective' : ' objectives') + ' · ' + settings.suppliers.length + ' suppliers') + '</span></span></button>';
 }
+
+function settingsPane() {
+  if (settingsTab === 'objectives') {
+    const list = settings.objectives;
+    return '<div><h3>Objectives</h3><p class="lead">What the agent should achieve, most important first. It follows them in everything it decides and proposes; when two conflict, the higher one wins.</p></div>' +
+      '<div>' + (list.length ? list.map((text, i) => '<div class="obj"><span class="n">' + (i + 1) + '</span><input class="set-in" data-obj="' + i + '" value="' + esc(text) + '" aria-label="Objective ' + (i + 1) + '">' +
+        '<span><button class="icon-btn" data-obj-move="' + i + '" data-by="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="icon-btn" data-obj-move="' + i + '" data-by="1" aria-label="Move down"' + (i === list.length - 1 ? ' disabled' : '') + '>↓</button><button class="icon-btn" data-obj-del="' + i + '" aria-label="Remove">✕</button></span></div>').join('')
+        : '<p class="cap">No objectives yet. Without any, the agent uses its own judgement about what matters most.</p>') + '</div>' +
+      '<form class="addline" id="obj-form"><input class="set-in" id="obj-new" placeholder="Add an objective, e.g. Ship every Collector\'s Edition on Sunday" aria-label="New objective" autocomplete="off"><button class="btn" type="submit">Add</button></form>';
+  }
+  if (settingsTab === 'suppliers') {
+    const field = (i, s, key, label, wide) => '<label' + (wide ? ' class="wide"' : '') + '>' + label + '<input class="set-in" data-sup="' + i + '" data-field="' + key + '" value="' + esc(s[key] || '') + '" autocomplete="off"></label>';
+    return '<div><h3>Suppliers</h3><p class="lead">Who the agent writes to, at which address, in which language. The agent fills this in from the documents; anything you change here overrides what it found, and it will not change your entries.</p></div>' +
+      (settings.suppliers.length ? settings.suppliers.map((s, i) => '<div class="sup">' + field(i, s, 'name', 'Supplier') + field(i, s, 'contact', 'Contact person') + field(i, s, 'email', 'Email') + field(i, s, 'language', 'Language') + field(i, s, 'notes', 'Notes', true) +
+        '<div class="sup-foot"><span class="cap">' + (s.by_team ? 'Edited by you' : 'Added by the agent') + '</span><button class="icon-btn" data-sup-del="' + i + '" aria-label="Remove supplier">✕</button></div></div>').join('')
+        : '<p class="cap">No suppliers yet. The agent adds them as it reads the documents.</p>') +
+      '<div><button class="btn" id="sup-add">Add a supplier</button></div>';
+  }
+  return '<div><h3>Automation</h3><p class="lead">How much the agent does on its own, and how it deals with suppliers.</p></div><div>' +
+    '<div class="set-row"><div><b>Auto mode</b><p>' + (autoAsk ? 'Emails and actions the agent marks as routine will go out without you reading them first. Anything that commits money or places an order still waits for you.'
+      : 'Routine emails and actions go ahead without asking: questions, status requests, confirmations. Anything that commits money or places an order still waits for your approval.') + '</p>' +
+      (autoAsk ? '<div class="row"><button class="btn btn-primary" data-auto="1">Turn on</button><button class="btn" data-auto="cancel">Cancel</button></div>' : '') + '</div>' +
+      '<button class="switch" id="sw-auto" role="switch" aria-checked="' + settings.auto + '" aria-label="Auto mode"></button></div>' +
+    '<div class="set-row"><div><b>Aggressive mode</b><p>The agent gets ruthless with suppliers. It names every failure and who owns it, plays suppliers against each other where a real alternative exists, holds contract penalties against them, sets deadlines in hours and escalates to their management. It threatens the relationship in your name: cancelled orders, no future projects, volume moved to a competitor. It does not lie: every fact it states comes from the documents or the mailbox. These emails always wait for your approval.</p></div>' +
+      '<button class="switch" id="sw-aggr" role="switch" aria-checked="' + settings.aggressive + '" aria-label="Aggressive mode"></button></div></div>';
+}
+
+function renderSettings() {
+  const box = $('settings');
+  box.hidden = !settingsOpen;
+  if (!settingsOpen) return;
+  box.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="Settings"><div class="sheet-head"><b>Settings</b><button class="sheet-x" data-close aria-label="Close settings">×</button></div>' +
+    '<div class="sheet-body"><nav class="set-nav">' + TABS.map(([id, name, icon]) => '<button class="' + (settingsTab === id ? 'on' : '') + '" data-tab="' + id + '">' + ICON[icon] + name + '</button>').join('') + '</nav>' +
+    '<div class="set-pane">' + settingsPane() + '</div></div></div>';
+}
+function save(patch) { Object.assign(settings, patch); renderAuto(); renderSettings(); post('/api/settings', patch); }
 
 /* ---------- shared pieces ---------- */
 function letter(top, subject, original, english, language, key, cls) {
@@ -572,7 +649,12 @@ function apply(e) {
     if (!before && a.status === 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.issue_id });
     else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: (a.auto ? 'Auto ' : '') + (a.outcome === 'done' ? (a.auto ? 'sent' : 'Sent') : a.outcome === 'failed' ? (a.auto ? 'failed' : 'Failed') : a.status === 'approved' ? (a.auto ? 'approved' : 'Approved') : 'Rejected'), label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
   }
-  else if (e.kind === 'auto') { autoOn = e.value; autoAsk = false; renderAuto(); }
+  else if (e.kind === 'auto') { settings.auto = e.value; renderAuto(); }   // from before settings existed
+  else if (e.kind === 'settings') {
+    settings = e.value; renderAuto();
+    const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('#settings');
+    if (settingsOpen && !typing) renderSettings();   // do not pull the form out from under someone typing in it
+  }
   else if (e.kind === 'status') { $('status').textContent = e.value; $('chat-head').classList.toggle('working', e.value === 'working'); }
   else if (e.kind === 'activity' && e.verb === 'Found') { /* the issue event already made this chip */ }
   else { if (e.kind === 'mail' && e.open) e.history = true; feed.push(e); if (e.kind === 'mail' && live) historyChanged(); }
@@ -596,8 +678,19 @@ function show(next) { view = next; renderLeft(); renderCenter(true); loadHistory
 document.addEventListener('click', (e) => {
   const t = (sel) => e.target.closest(sel);
   let el;
-  if (t('#auto-switch')) { if (autoOn) post('/api/auto', { on: false }); else { autoAsk = !autoAsk; renderAuto(); } return; }
-  if ((el = t('[data-auto]'))) { if (el.dataset.auto === '1') post('/api/auto', { on: true }); autoAsk = false; renderAuto(); return; }
+  if (t('#open-settings')) { settingsOpen = true; autoAsk = false; renderSettings(); return; }
+  if (settingsOpen) {
+    if (t('[data-close]') || e.target.id === 'settings') { settingsOpen = false; renderSettings(); return; }
+    if ((el = t('[data-tab]'))) { settingsTab = el.dataset.tab; autoAsk = false; renderSettings(); return; }
+    if (t('#sw-auto')) { if (settings.auto) save({ auto: false }); else { autoAsk = !autoAsk; renderSettings(); } return; }
+    if ((el = t('[data-auto]'))) { autoAsk = false; if (el.dataset.auto === '1') save({ auto: true }); else renderSettings(); return; }
+    if (t('#sw-aggr')) { save({ aggressive: !settings.aggressive }); return; }
+    if ((el = t('[data-obj-move]'))) { const i = Number(el.dataset.objMove), j = i + Number(el.dataset.by), list = [...settings.objectives]; [list[i], list[j]] = [list[j], list[i]]; save({ objectives: list }); return; }
+    if ((el = t('[data-obj-del]'))) { save({ objectives: settings.objectives.filter((_, i) => i !== Number(el.dataset.objDel)) }); return; }
+    if ((el = t('[data-sup-del]'))) { save({ suppliers: settings.suppliers.filter((_, i) => i !== Number(el.dataset.supDel)) }); return; }
+    if (t('#sup-add')) { settings.suppliers = [...settings.suppliers, { name: '', contact: '', email: '', language: '', notes: '', by_team: true }]; renderSettings(); const added = document.querySelector('[data-sup="' + (settings.suppliers.length - 1) + '"][data-field="name"]'); if (added) added.focus(); return; }
+    return;   // nothing behind the overlay reacts while it is open
+  }
   if ((el = t('[data-view]'))) { show(el.dataset.view); return; }
   if ((el = t('[data-open]')) && issues.has(el.dataset.open)) { selected = el.dataset.open; historyData = null; show(el.dataset.history ? 'history' : 'decision'); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
   if ((el = t('[data-evidence]'))) { evidenceOpen.set(selected, el.dataset.evidence); document.querySelectorAll('.tile').forEach((x) => x.classList.toggle('on', x === el)); $('viewer').innerHTML = '<p class="cap">Opening…</p>'; loadEvidence(el.dataset.evidence); return; }
@@ -609,7 +702,20 @@ document.addEventListener('click', (e) => {
   if (t('#chat-open') || t('#chat-close')) $('right').dataset.open = $('right').dataset.open === '1' ? '0' : '1';
 });
 
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && settingsOpen) { settingsOpen = false; renderSettings(); } });
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (!settingsOpen || !el.dataset) return;
+  if (el.dataset.obj !== undefined) { const list = [...settings.objectives]; list[Number(el.dataset.obj)] = el.value; save({ objectives: list.filter((x) => x.trim()) }); }
+  else if (el.dataset.sup !== undefined) {
+    const list = settings.suppliers.map((s) => ({ ...s })); const row = list[Number(el.dataset.sup)];
+    row[el.dataset.field] = el.value.trim(); row.by_team = true;
+    Object.assign(settings, { suppliers: list }); renderAuto();
+    post('/api/settings', { suppliers: list.filter((s) => s.name) });   // a row is only sent once it has a name; the form is left as it is while you tab through it
+  }
+});
 document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'obj-form') { e.preventDefault(); const text = $('obj-new').value.trim(); if (text) save({ objectives: [...settings.objectives, text] }); const again = $('obj-new'); if (again) again.focus(); return; }
   const form = e.target.closest('[data-log]');
   if (!form) return;
   e.preventDefault();

@@ -18,6 +18,7 @@ SYSTEM_PROMPT = """You are Faro, an autonomous agent that works for a team by wa
 You run continuously. You do not get one task and finish; messages reach you while you work, each tagged with where it came from:
 - [files] The folder you watch has new, changed or removed files. Read what looks relevant and work out whether it changes anything you concluded.
 - [chat] Someone on the team is talking to you through the app. Answer them straight away with tell_team, then carry on. What you write between tool calls is shown only as a small progress note, so an answer left there is easy to miss.
+- [settings] The team's standing instructions: their objectives in priority order, how hard to negotiate, and their supplier list. They arrive at the start and again whenever the team changes them; the latest one replaces the earlier ones.
 - [state] What survives from before a restart.
 - [log] Something the team recorded that happened outside this system: a phone call, a meeting, a decision someone took, a correction keyed into a system.
 - [approval] A person decided on something you proposed, and whether it was carried out.
@@ -97,6 +98,10 @@ def _describe(call: dict) -> dict:
         return {"verb": "Found", "label": args.get("title", "?"), "text": args.get("summary", "")}
     if call["name"] == "update_issue":
         return {"verb": "Noted", "label": args.get("note", "?"), "text": f"{args.get('issue_id', '?')}: {args.get('note', '')}", "open": args.get("issue_id", "")}
+    if call["name"] == "list_suppliers":
+        return {"verb": "Checked", "label": "supplier list", "text": "Read the supplier list"}
+    if call["name"] == "save_supplier":
+        return {"verb": "Listed", "label": args.get("name", "?"), "text": f"Added {args.get('name', '?')} to the supplier list"}
     if call["name"] == "list_corrections":
         return {"verb": "Checked", "label": "corrections", "text": "Read the corrections ledger"}
     if call["name"] == "list_mail":
@@ -163,7 +168,7 @@ class AgentRunner:
                 else:
                     self.hub.emit("agent", text=text)
             for call in message.tool_calls:
-                if call["name"] in READ_TOOLS or call["name"] == "update_issue":
+                if call["name"] in READ_TOOLS or call["name"] in ("update_issue", "save_supplier"):
                     self.hub.emit("activity", **_describe(call))
         elif isinstance(message, ToolMessage) and message.status == "error":
             self.hub.emit("activity", verb="Failed", label=message.name, text=f"{message.name} failed: {str(message.content)[:200]}")
@@ -202,6 +207,7 @@ async def watch_folder(hub: Hub, poll_seconds: float) -> None:
                 + ("Your issues and proposals so far. Do not open or propose these again; build on them:\n" + "\n".join(lines) + "\n" if lines else "You have not opened any issue yet.\n")
                 + ("Corrections the team approved (the truth, whatever the exports say):\n" + "\n".join(ledger) if ledger else "")
             )
+            hub.inject("[settings] " + hub.directives())
         first = False
         if known is None:
             if current:
@@ -211,6 +217,7 @@ async def watch_folder(hub: Hub, poll_seconds: float) -> None:
                     f"{_layout(list(current))}\n"
                     "Start your review. New files will be announced as they arrive."
                 )
+                hub.inject("[settings] " + hub.directives())
             else:
                 hub.emit("files", verb="Watching", label="empty folder", text=f"Watching {hub.data_dir}: no files yet")
         else:

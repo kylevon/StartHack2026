@@ -80,6 +80,9 @@ class Hub:
         self.issues = {i["id"]: Issue(**i) for i in self.store.issues()}
         self.approvals = {a["id"]: Approval(**a) for a in self.store.approvals()}
         self.auto = self.store.setting("auto", False)
+        self.aggressive = self.store.setting("aggressive", False)  # negotiate hard; still only with facts
+        self.objectives: list[str] = self.store.setting("objectives", [])  # what the team wants, most important first
+        self.suppliers: list[dict] = self.store.setting("suppliers", [])  # the contact list the team and the agent share
         self.restored = bool(self.events)
         # Record changes approved before the ledger existed belong in it too.
         entered = {c["approval_id"] for c in self.store.corrections()}
@@ -196,10 +199,70 @@ class Hub:
         return approval
 
     def set_auto(self, on: bool) -> None:
-        self.auto = on
-        self.store.set_setting("auto", on)
-        self.emit("auto", value=on)
+        self.update_settings(auto=on)
+
+    # ----- settings the team controls -----
+    def settings(self) -> dict:
+        return {"auto": self.auto, "aggressive": self.aggressive, "objectives": self.objectives, "suppliers": self.suppliers}
+
+    def directives(self) -> str:
+        """The team's standing instructions, as the agent is told them at start and whenever they change."""
+        parts = []
+        if self.objectives:
+            parts.append("The team's objectives, most important first. Follow them in everything you decide and propose; when two conflict, the higher one wins:\n"
+                         + "\n".join(f"  {n}. {text}" for n, text in enumerate(self.objectives, 1)))
+        else:
+            parts.append("The team has set no objectives. Use your own judgement about what matters most.")
+        if self.aggressive:
+            parts.append(
+                "Aggressive mode is ON. The team has authorised you to be ruthless with suppliers on its behalf. Name every failure plainly, with its date and its "
+                "number, and say who at the supplier owns it. Play suppliers against each other: where the documents or the mailbox show an alternative source, a "
+                "second quote, spare stock or capacity elsewhere, say so and say the business will go there. Hold every contract clause against them: penalties, "
+                "rush terms, service levels, the right to reject. Set deadlines in hours, not days, concede nothing without getting something back, and go over the "
+                "contact's head to their management when a commitment slips. "
+                "You may threaten the relationship itself. The team stands behind these consequences, so state them as its position: open purchase orders with this "
+                "supplier will be reviewed and can be cancelled, they will be left out of future projects and tenders, volume will be moved to a competitor, and "
+                "their supplier status will be downgraded. Tie the threat to something real where you can: an open order you have read, the next release, a "
+                "contract renewal. Be cold and direct. Do not insult or demean anyone, and threaten commercial consequences only. "
+                "What never changes is the truth about facts. State nothing as a fact that the documents or the mailbox do not support: never invent a competing "
+                "offer, a price, a stock figure, a deadline or a decision already taken, and never deny or rewrite what was said before. A threat says what the "
+                "team will do; it does not make up what has happened. Every email written this way needs a person, so mark it needs_human."
+            )
+        else:
+            parts.append("Aggressive mode is off. Be firm and courteous with suppliers.")
+        if self.suppliers:
+            parts.append("The supplier list (the team may have corrected it; where it differs from the documents, the list is right):\n" + "\n".join(
+                f"  {s.get('name', '?')} | contact {s.get('contact') or '-'} | {s.get('email') or 'no address'} | writes {s.get('language') or '?'}" + (f" | note: {s['notes']}" if s.get("notes") else "")
+                for s in self.suppliers))
+        else:
+            parts.append("The supplier list is empty. Fill it with save_supplier from what the documents say about each supplier: name, contact person, email address, language.")
+        return "\n\n".join(parts)
+
+    def update_settings(self, auto: bool | None = None, aggressive: bool | None = None, objectives: list[str] | None = None, suppliers: list[dict] | None = None, by_agent: bool = False) -> dict:
+        tell = []
+        if auto is not None and auto != self.auto:
+            self.auto = auto
+            self.store.set_setting("auto", auto)
+        if aggressive is not None and aggressive != self.aggressive:
+            self.aggressive = aggressive
+            self.store.set_setting("aggressive", aggressive)
+            tell.append("aggressive mode")
+        if objectives is not None:
+            cleaned = [text.strip() for text in objectives if text.strip()]
+            if cleaned != self.objectives:
+                self.objectives = cleaned
+                self.store.set_setting("objectives", cleaned)
+                tell.append("the objectives")
+        if suppliers is not None and suppliers != self.suppliers:
+            self.suppliers = suppliers
+            self.store.set_setting("suppliers", suppliers)
+            if not by_agent:
+                tell.append("the supplier list")
+        self.emit("settings", value=self.settings())
+        if tell:
+            self.inject(f"[settings] The team changed {' and '.join(tell)}. This replaces what you were told before:\n\n{self.directives()}")
         self._run_auto()
+        return self.settings()
 
     def _run_auto(self) -> None:
         """In auto mode, carry out every waiting proposal the agent itself marked as not needing a person."""

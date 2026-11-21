@@ -118,14 +118,21 @@ Context about the team:
 {context}"""
 
 
-def writer(model, context: str):
-    """Returns the function that turns the agent's brief into a finished email, using the mail model."""
+HARD_TONE = """
+
+The team has switched to aggressive negotiation and stands behind every consequence the brief names. Write a cold, hard email. Open with the failure or the demand, not with a greeting formula or thanks. Name what went wrong with its date and number, and who owns it. State the deadline in hours. Then state the consequences from the brief as the team's position, flatly and without softening: cancelled or reviewed orders, exclusion from future projects, business moved to a named competitor, contract penalties claimed, escalation to the recipient's management. No apologies, no "we would appreciate", no "unfortunately", no closing pleasantries beyond the signature.
+
+Two limits. Do not insult, mock or demean the reader, and threaten commercial consequences only. And add nothing the brief does not contain: no extra threat, no claim, no figure, no competitor's name, no decision presented as already taken."""
+
+
+def writer(model, context: str, hard=lambda: False):
+    """Returns the function that turns the agent's brief into a finished email, using the mail model. `hard` says whether the team is in aggressive mode right now."""
 
     async def write(to_name: str, language: str, brief: str, thread: str = "") -> dict:
         request = f"Recipient: {to_name}\n\nBrief:\n{brief}"
         if thread:
             request += f"\n\nThis is a reply inside the following conversation. Answer what was last said and do not repeat what both sides already know:\n{thread}"
-        reply = await model.ainvoke([("system", WRITER_PROMPT.format(language=language, context=context or "(none given)")), ("human", request)])
+        reply = await model.ainvoke([("system", WRITER_PROMPT.format(language=language, context=context or "(none given)") + (HARD_TONE if hard() else "")), ("human", request)])
         text = reply.content if isinstance(reply.content, str) else "".join(b.get("text", "") for b in reply.content if isinstance(b, dict) and b.get("type") == "text")
         match = re.search(r"SUBJECT:\s*(.+?)\s*\nBODY:\s*\n(.*?)\nENGLISH:\s*\n?(.*)", text, re.S)
         if not match:

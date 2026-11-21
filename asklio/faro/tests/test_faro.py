@@ -551,9 +551,10 @@ async def test_a_restart_announces_only_what_changed_in_folder_and_mailbox(folde
     again = Hub(folder, tmp_path / "state")  # the next process
     watcher = asyncio.create_task(watch_folder(again, 0.02))
     try:
-        await until(lambda: len(again.inbox) >= 2)
+        await until(lambda: len(again.inbox) >= 3)
         assert again.inbox[0].startswith("[state]") and "I-1" in again.inbox[0] and "Start your review" not in "".join(again.inbox)
-        assert "1 new" in again.inbox[1] and "arrived_while_down.txt" in again.inbox[1]
+        assert again.inbox[1].startswith("[settings]")  # the team's standing instructions, told again after every restart
+        assert "1 new" in again.inbox[2] and "arrived_while_down.txt" in again.inbox[2]
     finally:
         watcher.cancel()
 
@@ -635,3 +636,58 @@ async def test_the_record_works_the_same_on_postgres_and_takes_over_a_local_one(
     assert again.store.corrections()[0]["applied_note"] == "Keyed in." and again.store.seen_mail() == {"<a>", "<b>", "<c>"}
     assert again.open_issue("Second", "risk", "s", []).id == "I-2"
     again.store.close()
+
+
+async def test_the_team_sets_objectives_mode_and_suppliers_and_the_agent_is_told(folder, tmp_path):
+    from faro.tools import make_tools
+
+    hub = Hub(folder, tmp_path / "state")
+    tools = {t.name: t for t in make_tools(hub)}
+    assert "no objectives" in hub.directives() and "supplier list is empty" in hub.directives() and "Aggressive mode is off" in hub.directives()
+
+    hub.update_settings(objectives=["Ship every Collector's Edition on Sunday", "  ", "Spend as little as possible on express freight"])
+    assert hub.objectives == ["Ship every Collector's Edition on Sunday", "Spend as little as possible on express freight"]
+    told = hub.inbox[-1]
+    assert told.startswith("[settings]") and told.index("1. Ship every") < told.index("2. Spend as little") and "the higher one wins" in told
+
+    hub.update_settings(objectives=list(reversed(hub.objectives)))  # the team re-ranks them
+    assert "1. Spend as little" in hub.inbox[-1]
+
+    hub.update_settings(aggressive=True)
+    hard = hub.inbox[-1]
+    assert "Aggressive mode is ON" in hard and "never invent a competing" in hard and "needs_human" in hard
+    assert "left out of future projects" in hard and "can be cancelled" in hard  # it may threaten the relationship
+    assert "does not make up what has happened" in hard and "Do not insult" in hard  # but not lie or abuse
+
+    await tools["save_supplier"].ainvoke({"name": "Karton Nowak", "contact": "Agnieszka Nowak", "email": "a.nowak@supplier.example", "language": "Polish"})
+    assert "Error" in await tools["save_supplier"].ainvoke({"name": "Pune Diecast", "email": "ask reception"})
+    before = len(hub.inbox)
+    assert hub.suppliers[0]["by_team"] is False and len(hub.inbox) == before  # the agent's own additions are not announced back to it
+
+    hub.update_settings(suppliers=[{"name": "Karton Nowak", "contact": "Agnieszka Nowak", "email": "orders@supplier.example", "language": "Polish", "notes": "Orders only via Paul Winter", "by_team": True}])
+    assert "orders@supplier.example" in hub.inbox[-1] and "the list is right" in hub.inbox[-1]
+    assert "their version stands" in await tools["save_supplier"].ainvoke({"name": "karton nowak", "email": "a.nowak@supplier.example"})
+    assert hub.suppliers[0]["email"] == "orders@supplier.example" and "edited by the team" in await tools["list_suppliers"].ainvoke({})
+
+    again = Hub(folder, tmp_path / "state")  # all of it survives a restart
+    assert again.aggressive and again.objectives[0].startswith("Spend") and again.suppliers[0]["notes"] == "Orders only via Paul Winter"
+
+
+async def test_hard_tone_reaches_the_email_writer_only_in_aggressive_mode(folder, tmp_path):
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    from faro import mail
+
+    prompts = []
+
+    def fake_sonnet(messages):
+        prompts.append(messages[0][1])
+        return AIMessage("SUBJECT: s\nBODY:\nb\nENGLISH:\nSAME")
+
+    hub = Hub(folder, tmp_path / "state")
+    write = mail.writer(RunnableLambda(fake_sonnet), "ctx", hard=lambda: hub.aggressive)
+    await write("A", "English", "brief")
+    hub.update_settings(aggressive=True)
+    await write("A", "English", "brief")
+    assert "aggressive negotiation" not in prompts[0] and "aggressive negotiation" in prompts[1] and "exclusion from future projects" in prompts[1] and "add nothing the brief does not contain" in prompts[1]

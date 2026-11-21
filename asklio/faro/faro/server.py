@@ -30,6 +30,22 @@ class AutoIn(BaseModel):
     on: bool
 
 
+class SupplierIn(BaseModel):
+    name: str
+    contact: str = ""
+    email: str = ""
+    language: str = ""
+    notes: str = ""
+    by_team: bool = True
+
+
+class SettingsIn(BaseModel):
+    auto: bool | None = None
+    aggressive: bool | None = None
+    objectives: list[str] | None = None
+    suppliers: list[SupplierIn] | None = None
+
+
 class DecisionIn(BaseModel):
     approved: bool
     note: str = ""
@@ -50,7 +66,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
                     from langchain.chat_models import init_chat_model
 
                     mail_model = init_chat_model(config.MAIL_MODEL, max_tokens=8000)
-                    hub.write_email = mail.writer(mail_model, config.BRIEF)
+                    hub.write_email = mail.writer(mail_model, config.BRIEF, hard=lambda: hub.aggressive)
                     hub.translate_mail = mail.translator(mail_model, hub.store.cache("translations"))
                     hub.summarize = mail.summarizer(mail_model, hub.store.cache("summaries"))
                     hub.emphasize = mail.emphasizer(mail_model, hub.store.cache("emphasis"))
@@ -135,6 +151,15 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
                 return text
 
         return {"texts": list(await asyncio.gather(*(one(text) for text in body.texts[:40])))}
+
+    @app.get("/api/settings")
+    async def get_settings():
+        return app.state.hub.settings()
+
+    @app.post("/api/settings")
+    async def set_settings(body: SettingsIn):
+        suppliers = None if body.suppliers is None else [s.model_dump() for s in body.suppliers if s.name.strip()]
+        return app.state.hub.update_settings(body.auto, body.aggressive, body.objectives, suppliers)
 
     @app.post("/api/auto")
     async def auto(body: AutoIn):

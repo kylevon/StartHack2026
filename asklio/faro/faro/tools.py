@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from . import files, mail
 from .hub import Hub
 
-READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail", "list_corrections"}
+READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail", "list_corrections", "list_suppliers"}
 
 Severity = Literal["blocker", "risk", "info"]
 
@@ -59,6 +59,14 @@ class EditFile(Proposal):
     path: str = Field(description="File to change, relative to the document folder.")
     find: str = Field(description="Exact text to replace. Must occur in the file.")
     replace: str = Field(description="Text to put in its place.")
+
+
+class Supplier(BaseModel):
+    name: str = Field(description="The supplier's name as the documents write it.")
+    contact: str = Field(default="", description="The person to write to.")
+    email: str = Field(default="", description="Their email address, exactly as a document or a received message gives it. Leave empty if you have not read one.")
+    language: str = Field(default="", description="The language they prefer to be written to in.")
+    notes: str = Field(default="", description="One line worth knowing: what they supply, a status, a standing condition.")
 
 
 class Change(BaseModel):
@@ -191,7 +199,32 @@ def make_tools(hub: Hub) -> list:
             return "The ledger is empty: no record has been corrected, so the exports stand as they are."
         return "\n".join(f"{c['system']} | {c['record']} | {c['field']}: {c['old_value'] or '?'} -> {c['new_value']} | issue {c['issue_id']} | {'changed in the system' if c['applied_at'] else 'approved, not yet changed in the system'}" for c in rows)
 
-    tools = [list_files, read_file, search_files, list_corrections, open_issue, update_issue, tell_team, send_email, edit_file, update_record]
+    @tool
+    async def list_suppliers() -> str:
+        """The supplier list the team keeps: who to write to at each supplier, at which address, in which language. Where it differs from the documents, the list is right."""
+        if not hub.suppliers:
+            return "The supplier list is empty. Add each supplier you find in the documents with save_supplier."
+        return "\n".join(f"{s['name']} | contact {s.get('contact') or '-'} | {s.get('email') or 'no address'} | writes {s.get('language') or '?'}" + (" | edited by the team" if s.get("by_team") else "") + (f" | note: {s['notes']}" if s.get("notes") else "") for s in hub.suppliers)
+
+    @tool(args_schema=Supplier)
+    async def save_supplier(**kwargs) -> str:
+        """Add a supplier to the team's list, or complete an entry you added before. Entries the team has edited are theirs and stay as they are."""
+        entry = Supplier(**kwargs).model_dump()
+        if entry["email"] and not mail.ADDRESS.match(entry["email"]):
+            return f"Error: '{entry['email']}' is not an email address. Leave the field empty if the documents give none."
+        suppliers = [dict(s) for s in hub.suppliers]
+        for existing in suppliers:
+            if existing["name"].strip().lower() == entry["name"].strip().lower():
+                if existing.get("by_team"):
+                    return f"Not changed: the team has edited the entry for {existing['name']}, and their version stands."
+                existing.update(entry)
+                break
+        else:
+            suppliers.append(entry | {"by_team": False})
+        hub.update_settings(suppliers=suppliers, by_agent=True)
+        return f"Saved {entry['name']}. The list now holds {len(suppliers)} suppliers."
+
+    tools = [list_files, read_file, search_files, list_corrections, list_suppliers, save_supplier, open_issue, update_issue, tell_team, send_email, edit_file, update_record]
     if hub.mailbox is not None:
 
         @tool
