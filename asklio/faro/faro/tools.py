@@ -20,7 +20,7 @@ Severity = Literal["blocker", "risk", "info"]
 
 
 class OpenIssue(BaseModel):
-    title: str = Field(description="The problem in ten words or fewer, with the number that matters. Shown as the issue's title.")
+    title: str = Field(description="The problem in six words or fewer, e.g. 'Art books 5,900 short'. It is a label on a small card: one number at most, no explanation. The detail goes in the summary.")
     severity: Severity = Field(description="blocker: something important cannot go ahead without it. risk: may cost money, time or quality. info: worth knowing, no harm yet.")
     summary: str = Field(description="For a reader with no context: what you found and what it costs if ignored. A few sentences.")
     evidence: list[str] = Field(description="Paths of the files you read that back this up, the most telling one first.")

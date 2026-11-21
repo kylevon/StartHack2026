@@ -37,10 +37,10 @@ a{color:var(--accent)}
 .brand span{font-size:13px;color:var(--muted)}
 .ap{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
 .ap.on{box-shadow:var(--pressed)}
-.ap b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ap b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:15px;font-weight:600;letter-spacing:-.01em;line-height:1.3;overflow-wrap:anywhere}
 .ap .why{display:block;font-size:13px;color:var(--muted);line-height:1.35;overflow-wrap:anywhere}
-.st{display:block;font-size:12px;font-weight:600;margin-top:7px}
-.st-pending{color:var(--accent)} .st-rejected{color:var(--bad)} .st-approved{color:var(--ok)}
+.st{display:block;font-size:12px;font-weight:600;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-pending{color:var(--accent)} .st-rejected{color:var(--ink)} .st-approved{color:var(--ok)}
 .dot{width:10px;height:10px;border-radius:50%;margin-top:6px}
 .dot-blocker{background:var(--bad)} .dot-risk{background:#e08a00} .dot-info{background:var(--muted)}
 .ap.done{opacity:.6}
@@ -49,7 +49,7 @@ a{color:var(--accent)}
 .center{overflow:auto;min-width:0}
 .detail{max-width:760px;margin:0 auto;padding:40px 28px 80px;display:flex;flex-direction:column;gap:30px}
 .sevline{font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.sev-blocker{color:var(--bad)} .sev-risk{color:var(--warn)} .sev-info{color:var(--muted)}
+.sev-blocker{color:var(--ink)} .sev-risk{color:var(--warn)} .sev-info{color:var(--muted)}
 h1{font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.15;text-wrap:balance;margin-top:6px}
 h2{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
 .found{font-size:15.5px;color:var(--ink-2);max-width:65ch;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -81,7 +81,7 @@ tr:last-child td{border-bottom:0}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn-primary:hover{background:#0064c8}
 .verdict{font-size:17px;font-weight:700}
-.verdict.approved{color:var(--ok)} .verdict.rejected{color:var(--bad)}
+.verdict.approved{color:var(--ok)} .verdict.rejected{color:var(--ink)}
 .empty h1{font-size:26px}
 .empty p{color:var(--ink-2);margin-top:10px;max-width:56ch}
 
@@ -109,9 +109,9 @@ tr:last-child td{border-bottom:0}
 .chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 button.chip{color:var(--accent);font-weight:600}
 button.chip:hover{background:rgba(0,113,227,.12)}
-.chip.bad,.chip.bad i{color:var(--bad)}
+.chip.bad,.chip.bad i{color:var(--ink)}
 .chip.good,.chip.good i{color:var(--ok)}
-.event{font-size:12px;color:var(--bad);padding:0 4px;overflow-wrap:anywhere}
+.event{font-size:12px;color:var(--ink-2);font-weight:600;padding:0 4px;overflow-wrap:anywhere}
 .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);background:rgba(29,29,31,.06);border-radius:999px;padding:1px 8px;margin-top:6px}
 .ask{display:flex;gap:10px;padding:14px 18px 18px;align-items:center}
 .ask input{flex:1;min-width:0;font:inherit;font-size:14px;border:0;border-radius:999px;padding:11px 16px;background:var(--hi);color:var(--ink)}
@@ -191,7 +191,7 @@ button.chip:hover{background:rgba(0,113,227,.12)}
 .tl:first-child{border-top:0}
 .tl time{font-size:12px;color:var(--muted);line-height:1.5;padding-top:2px}
 .tl .what{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.tl .what.you{color:var(--accent)} .tl .what.in{color:var(--warn)} .tl .what.bad{color:var(--bad)} .tl .what.good{color:var(--ok)}
+.tl .what.you{color:var(--accent)} .tl .what.in{color:var(--warn)} .tl .what.bad{color:var(--ink)} .tl .what.good{color:var(--ok)}
 .tl p{font-size:14.5px;color:var(--ink-2);margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
 .tl .msg{margin:8px 0 0}
 @media (max-width:760px){.tl{grid-template-columns:minmax(0,1fr);gap:4px}}
@@ -254,7 +254,7 @@ function nextLine(issue) {
   const n = pendingOf(issue).length;
   if (issue.status === 'resolved') return ['Resolved', 'approved'];
   if (n) return [n === 1 ? 'Your approval needed' : n + ' approvals needed', 'pending'];
-  if (issue.next_step) return [issue.next_step, 'rejected'];
+  if (issue.next_step) return ['Action required', 'rejected'];   // who and what is on the Decision page
   if (awaiting(issue)) return ['Waiting for a reply', 'approved'];
   return ['No action needed', 'approved'];
 }
@@ -265,7 +265,7 @@ function renderLeft() {
   const list = [...issues.values()].sort((a, b) => rank(a) - rank(b));
   const waiting = [...approvals.values()].filter((a) => a.status === 'pending').length;
   $('left').innerHTML = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
-    (list.length ? list.map((i) => { const [text, tone] = nextLine(i); return '<button class="ap ' + (i.id === selected ? 'on ' : '') + (rank(i) === 3 ? 'done' : '') + '" data-open="' + i.id + '">' +
+    (list.length ? list.map((i) => { const [text, tone] = nextLine(i); return '<button class="ap ' + (i.id === selected ? 'on ' : '') + (rank(i) === 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(i.title) + '">' +
       '<span class="dot dot-' + esc(i.severity) + '"></span><span><b>' + esc(i.title) + '</b><span class="st st-' + tone + '">' + esc(text) + '</span></span></button>'; }).join('')
       : '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>');
 }
@@ -358,8 +358,8 @@ const WHAT = {
 function historyView(issue) {
   let body;
   if (!historyData || historyData.id !== issue.id) body = '<p class="cap">Reading the history and the mailbox…</p>';
-  else body = (historyData.problem ? '<p class="cap" style="color:var(--bad)">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
-    '<div class="timeline">' + historyData.entries.map((e) => {
+  else body = (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
+    '<div class="timeline">' + [...historyData.entries].reverse().map((e) => {
       const [label, tone] = WHAT[e.kind] || [e.kind, ''];
       const mail = e.kind.startsWith('mail_');
       const content = mail
@@ -369,7 +369,7 @@ function historyView(issue) {
       return '<div class="tl"><time>' + esc(stamp(e.ts)) + '</time><div><span class="what ' + tone + '">' + label + '</span>' + content + '</div></div>';
     }).join('') + '</div>';
   return '<div class="detail"><header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(issue.title) + '</h1>' +
-    '<p class="cap" style="margin-top:8px">Everything that happened on this issue, oldest first. Emails are read from the team mailbox.</p></header><section>' + body + '</section></div>';
+    '<p class="cap" style="margin-top:8px">Everything that happened on this issue, newest first. Emails are read from the team mailbox.</p></header><section>' + body + '</section></div>';
 }
 async function loadHistory() {
   const id = selected;
