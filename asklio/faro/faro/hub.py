@@ -11,6 +11,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import adapters
 from .store import Store
 
 
@@ -40,7 +41,7 @@ class Approval:
     args: dict
     headline: str  # the action, in a few words
     reason: str  # why this action
-    status: str = "pending"  # pending | approved | rejected
+    status: str = "pending"  # pending | approved | rejected | withdrawn (by the agent, before anyone decided)
     note: str = ""
     live: bool = False  # approving carries the action out, rather than only recording it
     outcome: str = ""  # done | failed | recorded, once approved
@@ -83,6 +84,7 @@ class Hub:
         self.aggressive = self.store.setting("aggressive", False)  # negotiate hard; still only with facts
         self.objectives: list[str] = self.store.setting("objectives", [])  # what the team wants, most important first
         self.suppliers: list[dict] = self.store.setting("suppliers", [])  # the contact list the team and the agent share
+        self.adapters_on: dict = self.store.setting("adapters", {})  # adapter id -> enabled: where approved corrections are posted
         self.restored = bool(self.events)
         # Record changes approved before the ledger existed belong in it too.
         entered = {c["approval_id"] for c in self.store.corrections()}
@@ -151,6 +153,25 @@ class Hub:
         self.inject(f"[log] The team recorded this on issue {issue.id} ({issue.title}): \"{text.strip()}\". It happened outside this system. Take it into account and update the issue if it changes anything.")
         return issue
 
+    async def reconcile(self, correction_id: int, auto: bool = False) -> dict:
+        """Post one ledger correction to its system through the enabled adapter, and record that in the issue's history."""
+        correction = next((c for c in self.store.corrections() if c["id"] == correction_id), None)
+        if correction is None:
+            raise KeyError(correction_id)
+        if correction["applied_at"]:
+            raise ValueError("This correction is already in the system.")
+        adapter = adapters.find(correction["system"], self.adapters_on)
+        if adapter is None:
+            raise ValueError(f"No adapter is enabled for {correction['system']}. Turn one on under Settings, Source of truth.")
+        reference = await adapters.POSTERS[adapter.id](correction)
+        how = f"Posted through the {adapter.name} adapter, reference {reference}."
+        correction = self.store.mark_applied(correction_id, how)
+        issue = self.issues[correction["issue_id"]]
+        what = f"{correction['system']} · {correction['record']} · {correction['field']}: {correction['old_value'] or '?'} → {correction['new_value']}"
+        self._log(issue, "auto_reconciled" if auto else "reconciled", f"{what}. {how}", correction["approval_id"])
+        self.inject(f"[log] A correction was posted to {correction['system']}: {what} (issue {issue.id}). {how}")
+        return correction
+
     def mark_applied(self, correction_id: int, note: str = "") -> dict:
         correction = self.store.mark_applied(correction_id, note.strip())
         if correction is None:
@@ -190,7 +211,8 @@ class Hub:
 
     # ----- approvals -----
     def propose(self, tool: str, args: dict, issue_id: str, headline: str, reason: str, needs_human: bool = True, human_reason: str = "") -> Approval:
-        approval = Approval(f"A-{len(self.approvals) + 1}", issue_id, tool, args, headline, reason, live=tool in self.executors,
+        live = tool in self.executors or (tool == "update_record" and adapters.find(args.get("system", ""), self.adapters_on) is not None)
+        approval = Approval(f"A-{len(self.approvals) + 1}", issue_id, tool, args, headline, reason, live=live,
                             needs_human=needs_human, human_reason=human_reason)
         self.approvals[approval.id] = approval
         self._put(approval)
@@ -203,7 +225,8 @@ class Hub:
 
     # ----- settings the team controls -----
     def settings(self) -> dict:
-        return {"auto": self.auto, "aggressive": self.aggressive, "objectives": self.objectives, "suppliers": self.suppliers}
+        return {"auto": self.auto, "aggressive": self.aggressive, "objectives": self.objectives, "suppliers": self.suppliers,
+                "adapters": [{"id": a.id, "name": a.name, "system": a.system, "description": a.description, "simulated": a.simulated, "enabled": bool(self.adapters_on.get(a.id))} for a in adapters.ADAPTERS]}
 
     def directives(self) -> str:
         """The team's standing instructions, as the agent is told them at start and whenever they change."""
@@ -236,9 +259,15 @@ class Hub:
                 for s in self.suppliers))
         else:
             parts.append("The supplier list is empty. Fill it with save_supplier from what the documents say about each supplier: name, contact person, email address, language.")
+        on = [a for a in adapters.ADAPTERS if self.adapters_on.get(a.id)]
+        if on:
+            parts.append("Reconciliation is on for: " + ", ".join(f"{a.system} (through the {a.name} adapter)" for a in on)
+                         + ". A correction to a record there is posted to the system as soon as it is approved, so propose corrections whenever a record is wrong.")
+        else:
+            parts.append("No system is connected for reconciliation. An approved correction only enters the ledger; someone has to change the system by hand.")
         return "\n\n".join(parts)
 
-    def update_settings(self, auto: bool | None = None, aggressive: bool | None = None, objectives: list[str] | None = None, suppliers: list[dict] | None = None, by_agent: bool = False) -> dict:
+    def update_settings(self, auto: bool | None = None, aggressive: bool | None = None, objectives: list[str] | None = None, suppliers: list[dict] | None = None, by_agent: bool = False, adapters_on: dict | None = None) -> dict:
         tell = []
         if auto is not None and auto != self.auto:
             self.auto = auto
@@ -258,6 +287,12 @@ class Hub:
             self.store.set_setting("suppliers", suppliers)
             if not by_agent:
                 tell.append("the supplier list")
+        if adapters_on is not None:
+            merged = self.adapters_on | {k: bool(v) for k, v in adapters_on.items() if any(a.id == k for a in adapters.ADAPTERS)}
+            if merged != self.adapters_on:
+                self.adapters_on = merged
+                self.store.set_setting("adapters", merged)
+                tell.append("which systems are connected for reconciliation")
         self.emit("settings", value=self.settings())
         if tell:
             self.inject(f"[settings] The team changed {' and '.join(tell)}. This replaces what you were told before:\n\n{self.directives()}")
@@ -274,6 +309,18 @@ class Hub:
                 task.set_name(approval.id)
                 self._auto_tasks.add(task)
                 task.add_done_callback(self._auto_tasks.discard)
+
+    def withdraw(self, approval_id: str, reason: str) -> Approval:
+        """The agent takes back a proposal nobody has decided yet, because events overtook it."""
+        approval = self.approvals[approval_id]
+        if approval.status != "pending":
+            raise ValueError(f"{approval_id} was already {approval.status}.")
+        approval.status = "withdrawn"
+        approval.note = reason.strip()
+        approval.decided = time.time()
+        self._put(approval)
+        self._log(self.issues[approval.issue_id], "withdrawn", f"{approval.headline}. {reason.strip()}", approval.id)
+        return approval
 
     def attach_reply(self, thread_id: str) -> list[Issue]:
         """Count an incoming message on the issues its conversation belongs to, so the UI shows it there."""
@@ -305,10 +352,21 @@ class Hub:
         if approval.tool == "update_record":
             # No system is connected, so the decision goes into the corrections ledger: what the record should say, and since when.
             self._enter_corrections(approval)
+            system = approval.args.get("system") or "the system"
             approval.outcome = "recorded"
-            approval.result = f"Entered in the corrections ledger. It is not changed in {approval.args.get('system') or 'the system'} itself until someone does that there."
-            told = f"was APPROVED {by} and entered in the corrections ledger.{note_text} Treat the corrected values as the truth from now on, although the exports still show the old ones. Nobody has changed {approval.args.get('system') or 'the system'} itself yet."
             kind = "auto_approved" if auto else "approved"
+            if adapters.find(system, self.adapters_on):  # a connected system gets the correction straight away
+                approval.result = f"Entered in the corrections ledger and posted to {system}."
+                told = f"was APPROVED {by}, entered in the corrections ledger and posted to {system} through its adapter.{note_text} Treat the corrected values as the truth from now on, although the exports you read may still show the old ones."
+                self._put(approval)
+                self._log(issue, kind, f"{approval.headline}.{said}", approval.id)
+                for correction in self.store.corrections(issue.id):
+                    if correction["approval_id"] == approval.id and not correction["applied_at"]:
+                        await self.reconcile(correction["id"], auto=True)
+                self.inject(f"[approval] {label} {told} Update the issue's next step.")
+                return approval
+            approval.result = f"Entered in the corrections ledger. It is not changed in {system} itself until someone does that there."
+            told = f"was APPROVED {by} and entered in the corrections ledger.{note_text} Treat the corrected values as the truth from now on, although the exports still show the old ones. Nobody has changed {system} itself yet."
         elif execute is None:
             approval.outcome = "recorded"
             approval.result = "Recorded in the action log. This kind of action is not connected to an outside system yet."

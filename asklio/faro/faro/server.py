@@ -44,6 +44,7 @@ class SettingsIn(BaseModel):
     aggressive: bool | None = None
     objectives: list[str] | None = None
     suppliers: list[SupplierIn] | None = None
+    adapters: dict[str, bool] | None = None
 
 
 class DecisionIn(BaseModel):
@@ -130,6 +131,15 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
         hub.log_manual(issue_id, body.text)
         return {"ok": True}
 
+    @app.post("/api/corrections/{correction_id}/reconcile")
+    async def reconcile(correction_id: int):
+        try:
+            return await app.state.hub.reconcile(correction_id)
+        except KeyError:
+            raise HTTPException(404, f"No correction {correction_id}.") from None
+        except ValueError as err:
+            raise HTTPException(409, str(err)) from None
+
     @app.post("/api/corrections/{correction_id}/applied")
     async def applied(correction_id: int, body: NoteIn):
         try:
@@ -159,7 +169,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
     @app.post("/api/settings")
     async def set_settings(body: SettingsIn):
         suppliers = None if body.suppliers is None else [s.model_dump() for s in body.suppliers if s.name.strip()]
-        return app.state.hub.update_settings(body.auto, body.aggressive, body.objectives, suppliers)
+        return app.state.hub.update_settings(body.auto, body.aggressive, body.objectives, suppliers, adapters_on=body.adapters)
 
     @app.post("/api/auto")
     async def auto(body: AutoIn):

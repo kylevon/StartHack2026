@@ -56,6 +56,12 @@ It holds:
 
 Kept outside on purpose: the emails (the mailbox is their source of truth; only links and derived text are stored), the documents (the data folder), secrets, and the agent's working memory.
 
+## Source of truth adapters
+
+Under Settings, Source of truth, the team can connect the system that holds its records (`adapters.py`). With an adapter on, an approved correction is posted to that system at once, corrections already in the ledger can be reconciled with one click, and each posting is tracked in the issue's history with a reference.
+
+The only adapter, Soony SAP, is a stand-in: it accepts the posting and returns a reference, but no SAP is behind it. The interface does not say this, so say it when you demo it.
+
 ## Not done yet
 
 - **Only email is connected.** An approved `update_record` goes into the corrections ledger and an approved `edit_file` is recorded; neither changes the system or the file. The agent is told so.

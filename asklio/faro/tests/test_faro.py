@@ -691,3 +691,61 @@ async def test_hard_tone_reaches_the_email_writer_only_in_aggressive_mode(folder
     hub.update_settings(aggressive=True)
     await write("A", "English", "brief")
     assert "aggressive negotiation" not in prompts[0] and "aggressive negotiation" in prompts[1] and "exclusion from future projects" in prompts[1] and "add nothing the brief does not contain" in prompts[1]
+
+
+async def test_the_agent_withdraws_a_proposal_instead_of_asking_for_a_rejection(folder, tmp_path):
+    from faro.tools import make_tools
+
+    sent = []
+
+    async def send(approval):
+        sent.append(approval.id)
+        return "Sent."
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.executors["send_email"] = send
+    withdraw = next(t for t in make_tools(hub) if t.name == "withdraw_proposal")
+    issue = hub.open_issue("Art books short", "blocker", "s", [])
+    hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Send the call-off", "r", needs_human=False)
+    assert "withdrawn" in await withdraw.ainvoke({"approval_id": "A-1", "reason": "A teammate already sent it at 17:37."})
+    assert hub.approvals["A-1"].status == "withdrawn" and issue.history[-1]["kind"] == "withdrawn" and "already sent it" in issue.history[-1]["text"]
+    hub.set_auto(True)  # a withdrawn proposal is never carried out, not even by auto mode
+    await asyncio.sleep(0.05)
+    assert sent == []
+    with pytest.raises(ValueError):
+        await hub.decide("A-1", approved=True)
+    assert "Only a proposal that is still waiting" in await withdraw.ainvoke({"approval_id": "A-1", "reason": "again"})
+    assert Hub(folder, tmp_path / "state").approvals["A-1"].status == "withdrawn"
+
+
+async def test_an_enabled_adapter_posts_corrections_and_tracks_them(folder, tmp_path):
+    hub = Hub(folder, tmp_path / "state")
+    issue = hub.open_issue("Art books short", "blocker", "s", [])
+    record = {"system": "SAP", "record": "goods receipt 5000413065", "changes": [{"field": "quantity", "old_value": "80000", "new_value": "8000"}]}
+
+    before = hub.propose("update_record", record, issue.id, "Correct the receipt", "r")
+    await hub.decide("A-1", approved=True)
+    (waiting,) = hub.store.corrections()
+    assert not before.live and waiting["applied_at"] is None  # no adapter: the ledger only
+    with pytest.raises(ValueError, match="No adapter is enabled"):
+        await hub.reconcile(waiting["id"])
+
+    assert [a["id"] for a in hub.settings()["adapters"]] == ["soony-sap"] and not hub.settings()["adapters"][0]["enabled"]
+    hub.update_settings(adapters_on={"soony-sap": True, "made-up": True})
+    assert hub.adapters_on == {"soony-sap": True} and "Reconciliation is on for: SAP" in hub.inbox[-1]
+
+    posted = await hub.reconcile(waiting["id"])  # the reviewer reconciles the one that was waiting
+    assert posted["applied_at"] and "Posted through the Soony SAP adapter, reference REC-" in posted["applied_note"]
+    assert issue.history[-1]["kind"] == "reconciled"
+    with pytest.raises(ValueError, match="already in the system"):
+        await hub.reconcile(waiting["id"])
+
+    after = hub.propose("update_record", record | {"record": "stock batch 5000413065"}, issue.id, "Correct the stock", "r")
+    assert after.live  # with an adapter on, approving a correction posts it
+    await hub.decide("A-2", approved=True)
+    rows = hub.store.corrections()
+    assert rows[1]["applied_at"] and [h["kind"] for h in issue.history][-2:] == ["approved", "auto_reconciled"]
+    assert "posted to SAP through its adapter" in hub.inbox[-1]
+
+    again = Hub(folder, tmp_path / "state")
+    assert again.settings()["adapters"][0]["enabled"] and all(c["applied_at"] for c in again.store.corrections())

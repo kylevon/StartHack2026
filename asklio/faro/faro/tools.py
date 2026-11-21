@@ -24,14 +24,14 @@ class OpenIssue(BaseModel):
     severity: Severity = Field(description="blocker: something important cannot go ahead without it. risk: may cost money, time or quality. info: worth knowing, no harm yet.")
     summary: str = Field(description="For a reader with no context: what you found and what it costs if ignored. A few sentences.")
     evidence: list[str] = Field(description="Paths of the files you read that back this up, the most telling one first.")
-    next_step: str = Field(default="", description="What has to happen next and who does it, in one line, when that is not one of your own proposals or a reply you are waiting for: for example a person who has to act outside this system. Leave empty otherwise.")
+    next_step: str = Field(default="", description="What someone has to do outside this system, and who: for example a named person who has to make a phone call or book a truck. One or two short sentences. Leave empty when nothing of that kind is needed. Do not mention your proposals here: a proposal waiting for approval is shown on its own, and one you no longer want you take back with withdraw_proposal.")
 
 
 class UpdateIssue(BaseModel):
     issue_id: str
     note: str = Field(description="What happened or what you learned, in one or two sentences. It becomes an entry in the issue's history.")
     summary: str = Field(default="", description="A new summary, only when your understanding of the problem has changed.")
-    next_step: str | None = Field(default=None, description="The new next step, as in open_issue. 'none' when nothing is left to do. Omit to leave it unchanged.")
+    next_step: str | None = Field(default=None, description="The new next step, as in open_issue: only what someone has to do outside this system, never an instruction to approve or reject a proposal. 'none' when nothing of that kind is left. Omit to leave it unchanged.")
     status: Literal["open", "resolved"] | None = Field(default=None, description="'resolved' once the problem is dealt with or turned out to be nothing.")
     severity: Severity | None = Field(default=None, description="Only when it has become more or less serious.")
     evidence: list[str] = Field(default_factory=list, description="Further file paths to add.")
@@ -127,6 +127,17 @@ def make_tools(hub: Hub) -> list:
             return error
         issue = hub.update_issue(**update.model_dump())
         return f"{issue.id} updated. Next step now: {issue.next_step or 'none'}. Status: {issue.status}."
+
+    @tool
+    async def withdraw_proposal(approval_id: str, reason: str) -> str:
+        """Take back one of your own proposals that nobody has decided yet, because it is no longer right: it was overtaken by events, already done by someone else, or replaced by a better one. Say why in one sentence. Do this rather than asking the reviewer to reject it."""
+        if approval_id not in hub.approvals:
+            return f"Error: there is no proposal '{approval_id}'."
+        try:
+            hub.withdraw(approval_id, reason)
+        except ValueError as err:
+            return f"Error: {err} Only a proposal that is still waiting can be withdrawn."
+        return f"{approval_id} withdrawn. It no longer waits for anyone."
 
     def queue(name: str, proposal: Proposal) -> str:
         if error := unknown(proposal.issue_id):
@@ -224,7 +235,7 @@ def make_tools(hub: Hub) -> list:
         hub.update_settings(suppliers=suppliers, by_agent=True)
         return f"Saved {entry['name']}. The list now holds {len(suppliers)} suppliers."
 
-    tools = [list_files, read_file, search_files, list_corrections, list_suppliers, save_supplier, open_issue, update_issue, tell_team, send_email, edit_file, update_record]
+    tools = [list_files, read_file, search_files, list_corrections, list_suppliers, save_supplier, open_issue, update_issue, tell_team, send_email, edit_file, update_record, withdraw_proposal]
     if hub.mailbox is not None:
 
         @tool
