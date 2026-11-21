@@ -31,9 +31,10 @@ a{color:var(--accent)}
 
 .app{display:grid;grid-template-columns:360px minmax(0,1fr) 368px;height:100%;padding:0 16px}
 
-.left{display:flex;flex-direction:column;min-height:0;padding:0 16px 0 12px}
-.left-list{flex:1;min-height:0;overflow:auto;padding:26px 6px 18px 0;margin-right:-6px;display:flex;flex-direction:column;gap:18px}
-.auto{flex:none;border-top:1px solid var(--hair);padding:12px 0 16px}
+.left{display:flex;flex-direction:column;min-height:0}
+/* The list scrolls, and a scrolling box clips at its padding edge. The side padding is what leaves the cards' shadows (5px offset, 14px blur) room to show. */
+.left-list{flex:1;min-height:0;overflow:auto;padding:26px 22px 22px;display:flex;flex-direction:column;gap:18px}
+.auto{flex:none;border-top:1px solid var(--hair);margin:0 22px;padding:12px 0 16px}
 .setbtn{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:14px;background:transparent;padding:9px 10px;text-align:left}
 .setbtn:hover{background:rgba(29,29,31,.05)}
 .setbtn svg,.set-nav svg{width:18px;height:18px;flex:none;color:var(--ink-2)}
@@ -75,7 +76,7 @@ a{color:var(--accent)}
 .addline{display:flex;gap:10px}
 @media (max-width:700px){.sheet-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.set-nav{flex-direction:row;border-right:0;border-bottom:1px solid var(--hair);overflow-x:auto}.sup{grid-template-columns:minmax(0,1fr)}}
 .auto .btn{padding:7px 14px;font-size:13px}
-.brand{padding:0 6px 4px}
+.brand{padding:0 2px 4px}
 .brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
 .brand span{font-size:13px;color:var(--muted)}
 .ap{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
@@ -181,8 +182,8 @@ button.chip:hover{background:rgba(0,113,227,.12)}
 @media (max-width:760px){
   html,body{height:auto}
   .app{display:block;height:auto}
-  .left{padding:0 4px}
-  .left-list{overflow:visible;padding:22px 0 12px;margin-right:0}
+  .left-list{overflow:visible;padding:22px 4px 12px}
+  .auto{margin:0 4px}
   .center{overflow:visible}
   .detail{padding:26px 4px 104px}
   h1{font-size:25px}
