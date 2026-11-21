@@ -29,6 +29,7 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 | `FARO_MAIL_MODEL` | `anthropic:claude-sonnet-5-5` | Model that writes the emails from the agent's brief |
 | `FARO_MAIL` | `on` | `off` keeps email approvals record-only |
 | `FARO_MAIL_POLL_SECONDS` | `20` | How often the mailbox is checked |
+| `FARO_DATABASE_URL` | empty | Postgres URL (e.g. Supabase's session pooler) for the system of record. Empty: a local SQLite file |
 | `FARO_PORT` | `8000` | |
 
 ## How it works
@@ -43,7 +44,9 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 
 ## System of record
 
-Everything Faro itself knows and decided is in one SQLite file, `.faro/faro.db` (`store.py`):
+Everything Faro itself knows and decided is in one database (`store.py`): a local SQLite file, `.faro/faro.db`, or a hosted Postgres when `FARO_DATABASE_URL` is set. On its first start against an empty hosted database Faro copies the local record across. With Postgres the tables live in their own `faro` schema, writes are queued to a background thread so the network never stalls the agent, and only one Faro should run per database, because the running instance assigns issue, approval and event numbers.
+
+It holds:
 
 - **Issues, approvals and history.** History is only ever added to: what the agent found and proposed, what was approved or rejected (by a person or by auto mode), and what the team logged by hand.
 - **Corrections ledger.** An approved record change is stored as system, record, field, old value, new value and when it was approved. From then on the agent treats the new value as the truth (`list_corrections`), even though the export still shows the old one. "Mark as changed" records when someone has entered it in the system itself.

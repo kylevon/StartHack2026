@@ -597,3 +597,41 @@ def test_a_record_change_approved_before_the_ledger_is_entered_at_start(folder, 
     (row,) = again.store.corrections()
     assert (row["approval_id"], row["field"], row["old_value"], row["new_value"]) == ("A-1", "quantity", "", "8000")
     assert len(Hub(folder, tmp_path / "state").store.corrections()) == 1  # and only once
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("FARO_TEST_POSTGRES"), reason="set FARO_TEST_POSTGRES to a throwaway Postgres URL")
+async def test_the_record_works_the_same_on_postgres_and_takes_over_a_local_one(folder, tmp_path):
+    import os
+
+    import psycopg
+
+    url = os.environ["FARO_TEST_POSTGRES"]
+    with psycopg.connect(url, autocommit=True) as admin:
+        admin.execute("DROP SCHEMA IF EXISTS faro CASCADE")
+
+    local = Hub(folder, tmp_path / "state")  # a record that started life in the local file
+    local.open_issue("Art books short", "blocker", "s", ["erp.csv"])
+    local.propose("update_record", {"system": "SAP", "record": "GR 1", "changes": [{"field": "qty", "old_value": "80000", "new_value": "8000"}]}, "I-1", "Correct", "r")
+    await local.decide("A-1", approved=True)
+    local.store.cache("translations")["<m>"] = {"v": 2, "english": "żółć stays intact"}
+    local.store.remember_files({"a.csv": (10, 99)})
+
+    hosted = Hub(folder, tmp_path / "state", url)  # first start on the hosted database: it takes the local record over
+    assert hosted.restored and hosted.issues["I-1"].title == "Art books short" and hosted.approvals["A-1"].outcome == "recorded"
+    assert [h["kind"] for h in hosted.issues["I-1"].history] == ["found", "proposed", "approved"]
+    assert hosted.store.corrections()[0]["new_value"] == "8000" and hosted.store.known_files() == {"a.csv": (10, 99)}
+    assert hosted.store.cache("translations")["<m>"]["english"] == "żółć stays intact"
+
+    hosted.log_manual("I-1", "Called Paul.")
+    hosted.mark_applied(hosted.store.corrections()[0]["id"], "Keyed in.")
+    hosted.store.remember_mail(["<a>", "<b>"])
+    hosted.store.remember_mail(["<b>", "<c>"])
+    hosted.set_auto(True)
+    hosted.store.close()
+
+    again = Hub(folder, tmp_path / "state", url)  # a restart on the hosted database: nothing is imported twice
+    assert len(again.events) == len(hosted.events) and again.auto
+    assert [h["kind"] for h in again.issues["I-1"].history] == ["found", "proposed", "approved", "logged", "applied"]
+    assert again.store.corrections()[0]["applied_note"] == "Keyed in." and again.store.seen_mail() == {"<a>", "<b>", "<c>"}
+    assert again.open_issue("Second", "risk", "s", []).id == "I-2"
+    again.store.close()

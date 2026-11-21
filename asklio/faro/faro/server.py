@@ -35,10 +35,10 @@ class DecisionIn(BaseModel):
     note: str = ""
 
 
-def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mailbox=None) -> FastAPI:
+def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mailbox=None, database_url=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        hub = Hub(data_dir or config.DATA_DIR, state_dir or config.STATE_DIR)
+        hub = Hub(data_dir or config.DATA_DIR, state_dir or config.STATE_DIR, config.DATABASE_URL if database_url is None else database_url)
         app.state.hub = hub
         tasks = [asyncio.create_task(watch_folder(hub, poll_seconds or config.POLL_SECONDS))]
         try:
@@ -69,6 +69,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
         yield
         for task in tasks:
             task.cancel()
+        hub.store.close()  # lets queued writes to a hosted database finish
 
     app = FastAPI(lifespan=lifespan)
 
@@ -211,7 +212,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
 
 def main() -> None:
     mailbox = config.MAIL_INBOX if config.MAIL_ENABLED and config.MODEL != "scripted" else "off"
-    print(f"Faro: http://127.0.0.1:{config.PORT}  (model {config.MODEL}, watching {config.DATA_DIR}, mail {mailbox}, emails written by {config.MAIL_MODEL})")
+    print(f"Faro: http://127.0.0.1:{config.PORT}  (model {config.MODEL}, watching {config.DATA_DIR}, mail {mailbox}, emails written by {config.MAIL_MODEL}, record in {config.DATABASE_URL.split("@")[-1].split("?")[0] if config.DATABASE_URL else "local SQLite"})")
     # Open event streams never close on their own; without a limit a stopped server lingers with the agent still running.
     uvicorn.run(create_app(), host="127.0.0.1", port=config.PORT, log_level="warning", timeout_graceful_shutdown=2)
 

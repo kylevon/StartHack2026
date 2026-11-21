@@ -12,6 +12,8 @@ load_dotenv(REPO_DIR / ".env.local", override=True)  # untracked: API keys go he
 
 DATA_DIR = Path(os.environ.get("FARO_DATA_DIR", APP_DIR.parent / "data" / "soony-data")).resolve()
 STATE_DIR = Path(os.environ.get("FARO_STATE_DIR", APP_DIR / ".faro")).resolve()
+# Hosted Postgres (e.g. Supabase) for the system of record. Empty: a local SQLite file in STATE_DIR.
+DATABASE_URL = os.environ.get("FARO_DATABASE_URL", "")
 MODEL = os.environ.get("FARO_MODEL", "anthropic:claude-opus-5-5")
 POLL_SECONDS = float(os.environ.get("FARO_POLL_SECONDS", "5"))
 PORT = int(os.environ.get("FARO_PORT", "8000"))

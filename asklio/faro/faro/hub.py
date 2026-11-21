@@ -54,7 +54,7 @@ class Approval:
 
 
 class Hub:
-    def __init__(self, data_dir: Path, state_dir: Path):
+    def __init__(self, data_dir: Path, state_dir: Path, database_url: str = ""):
         self.data_dir = data_dir
         self.state_dir = state_dir
         self.events: list[dict] = []
@@ -71,9 +71,11 @@ class Hub:
         self.translate_mail = None  # async (message_id, text) -> {language, summary, english}
         self.summarize = None  # async (text) -> one-line summary of a history entry
         self.emphasize = None  # async (text) -> the same words with bold and lists added
-        self.store = Store(state_dir / "faro.db")
+        self.store = Store(state_dir / "faro.db", database_url)
         if self.store.is_new:
-            self.store.import_legacy(state_dir)  # carry over the JSON files from before the database existed
+            # Carry over what came before: the local database when moving to a hosted one, else the older JSON files.
+            if not (database_url and self.store.import_sqlite(state_dir / "faro.db")):
+                self.store.import_legacy(state_dir)
         self.events = self.store.events()
         self.issues = {i["id"]: Issue(**i) for i in self.store.issues()}
         self.approvals = {a["id"]: Approval(**a) for a in self.store.approvals()}
