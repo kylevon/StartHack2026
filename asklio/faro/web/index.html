@@ -88,8 +88,14 @@ a{color:var(--accent)}
 .st-you{color:var(--accent);font-weight:600}
 .risk{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px}
 .risk-blocker{color:var(--ink)} .risk-risk{color:var(--muted)} .risk-info{color:var(--muted);font-weight:500;opacity:.75}
-.grp{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 4px 0;margin-bottom:-6px}
+.grp{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;background:transparent;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 4px 0;margin-bottom:-6px;text-align:left}
+.grp-name{display:flex;align-items:center;gap:6px}
+.grp .chev{width:14px;height:14px;line-height:13px;font-size:15px;font-style:normal;color:inherit}
+.grp:hover{color:var(--ink)}
+.grp.you:hover{color:var(--accent)}
+.grp[aria-expanded="false"]{margin-bottom:0}
 .grp.you{color:var(--accent)}
+.grp.ahead,.grp.ahead:hover{color:var(--warn)}
 .grp span{font-weight:600;letter-spacing:0}
 .dot{width:10px;height:10px;border-radius:50%;margin-top:6px}
 .dot-blocker{background:var(--bad)} .dot-risk{background:#e08a00} .dot-info{background:var(--muted)}
@@ -306,7 +312,9 @@ const msgLang = new Map();      // message or draft key -> 'orig' when the reade
 const sheetOpen = new Map();    // file path -> sheet index
 const expanded = new Set();     // history entries the reader opened in full
 let shownPlace = '';
-let settings = { auto: false, aggressive: false, objectives: [], suppliers: [], adapters: [] };   // what the team controls
+let outlook = { scenarios: [], forecast: {} }, outlookStamp = 0;   // what could still go wrong, and where things end up if nothing changes
+let lookSel = null;   // which scenario is open in the centre
+let settings = { auto: false, aggressive: false, forecasting: false, objectives: [], suppliers: [], adapters: [] };   // what the team controls
 let settingsOpen = false, settingsTab = 'objectives', autoAsk = false;
 let historyData = null;         // { id, entries, problem } for the issue on screen
 
@@ -367,7 +375,8 @@ function kind(a) {
   return a.args.system + ': ' + a.args.record;
 }
 const of = (issue) => [...approvals.values()].filter((a) => a.issue_id === issue.id);
-const pendingOf = (issue) => of(issue).filter((a) => a.status === 'pending');
+// A measure against a scenario is decided on that scenario's card, so it does not also pull its issue into "needs your approval".
+const pendingOf = (issue) => of(issue).filter((a) => a.status === 'pending' && !a.scenario_id);
 const awaiting = (issue) => issue.thread_ids.length > 0 && issue.replies === 0;
 // Who an outside step is waiting on: the name the agent gave, or for older issues the first name it put in bold.
 function owner(issue) {
@@ -397,20 +406,37 @@ function detail(issue) {
   return '';
 }
 
-/* ---------- left: issues ---------- */
+/* ---------- left: issues, then what could still go wrong ---------- */
+const LIKELY = { high: ['Likely', 0], medium: ['Possible', 1], low: ['Unlikely', 2] };
+// Which groups of the left column are folded away. A convenience for this browser only.
+let folded = new Set();
+try { folded = new Set(JSON.parse(localStorage.getItem('faro-folded') || '[]')); } catch (err) { /* private window or blocked storage: everything stays open */ }
+function fold(key) {
+  if (folded.has(key)) folded.delete(key); else folded.add(key);
+  try { localStorage.setItem('faro-folded', JSON.stringify([...folded])); } catch (err) { /* not remembered, still works */ }
+  renderLeft();
+}
+const measures = (x) => [...approvals.values()].filter((a) => a.scenario_id === x.id);
+const measuresWaiting = (x) => measures(x).filter((a) => a.status === 'pending');
+const watching = () => outlook.scenarios.filter((x) => x.status === 'watching').sort((a, b) => (measuresWaiting(b).length > 0) - (measuresWaiting(a).length > 0) || LIKELY[a.likelihood][1] - LIKELY[b.likelihood][1] || b.created - a.created);
 function renderLeft() {
   const list = [...issues.values()].sort((a, b) => groupOf(a) - groupOf(b) || RISK[a.severity] - RISK[b.severity] || b.updated - a.updated);
   const waiting = [...approvals.values()].filter((a) => a.status === 'pending').length;
   let html = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>';
   if (!list.length) html += '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>';
-  let current = -1;
-  for (const i of list) {
-    const g = groupOf(i);
-    if (g !== current) { current = g; html += '<div class="grp' + (g === 0 ? ' you' : '') + '">' + GROUPS[g] + '<span>' + list.filter((x) => groupOf(x) === g).length + '</span></div>'; }
-    const line = detail(i);
-    html += '<button class="ap ' + (i.id === selected ? 'on ' : '') + (g >= 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(bare(i.title)) + '">' +
-      '<span class="risk risk-' + esc(i.severity) + '">' + esc(i.severity) + '</span><b>' + esc(bare(i.title)) + '</b>' + (line ? '<span class="st' + (g === 0 ? ' st-you' : '') + '">' + esc(line) + '</span>' : '') + '</button>';
+  const heading = (key, name, count, you) => '<button class="grp' + (you ? ' you' : '') + '" data-fold="' + key + '" aria-expanded="' + !folded.has(key) + '"><span class="grp-name"><i class="chev' + (folded.has(key) ? '' : ' up') + '" aria-hidden="true">›</i>' + name + '</span><span>' + count + '</span></button>';
+  const card = (i, g) => { const line = detail(i); return '<button class="ap ' + (i.id === selected && view !== 'look' ? 'on ' : '') + (g >= 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(bare(i.title)) + '">' +
+    '<span class="risk risk-' + esc(i.severity) + '">' + esc(i.severity) + '</span><b>' + esc(bare(i.title)) + '</b>' + (line ? '<span class="st' + (g === 0 ? ' st-you' : '') + '">' + esc(line) + '</span>' : '') + '</button>'; };
+  const section = (g) => { const mine = list.filter((i) => groupOf(i) === g); return mine.length ? heading('g' + g, GROUPS[g], mine.length, g === 0) + (folded.has('g' + g) ? '' : mine.map((i) => card(i, g)).join('')) : ''; };
+  html += section(0) + section(1) + section(2);
+  // Not issues: nothing has happened yet. Same card as everything else; the group heading and the likelihood word say what they are.
+  const ahead = watching();
+  if (ahead.length) {
+    html += heading('look', 'Could go wrong', ahead.length, false).replace('class="grp"', 'class="grp ahead"');
+    if (!folded.has('look')) html += ahead.map((x) => '<button class="ap look ' + (view === 'look' && lookSel === x.id ? 'on' : '') + '" data-look="' + x.id + '" title="' + esc(bare(x.what)) + '">' +
+      '<span class="risk risk-' + (x.likelihood === 'high' ? 'blocker' : x.likelihood === 'medium' ? 'risk' : 'info') + '">' + LIKELY[x.likelihood][0] + '</span><b>' + esc(bare(x.what)) + '</b>' + (measuresWaiting(x).length ? '<span class="st st-you">' + esc(bare(measuresWaiting(x)[0].headline)) + '</span>' : measures(x).some((a) => a.outcome === 'done') ? '<span class="st">Reminder sent</span>' : '') + '</button>').join('');
   }
+  html += section(3) + section(4);
   $('left').innerHTML = html;
 }
 
@@ -425,7 +451,7 @@ const TABS = [['objectives', 'Objectives', 'target'], ['suppliers', 'Suppliers',
 const adapterFor = (system) => (settings.adapters || []).find((a) => a.enabled && String(system || '').toLowerCase().includes(a.system.toLowerCase()));
 
 function renderAuto() {   // the settings button at the bottom of the left column
-  const modes = [settings.auto ? 'Auto mode on' : '', settings.aggressive ? 'Aggressive mode on' : '', ...(settings.adapters || []).filter((a) => a.enabled).map((a) => a.system + ' connected')].filter(Boolean).join(' · ');
+  const modes = [settings.auto ? 'Auto mode on' : '', settings.aggressive ? 'Aggressive mode on' : '', settings.forecasting ? 'Forecasting on' : '', ...(settings.adapters || []).filter((a) => a.enabled).map((a) => a.system + ' connected')].filter(Boolean).join(' · ');
   $('auto').innerHTML = '<button class="setbtn" id="open-settings">' + ICON.gear + '<span style="min-width:0"><b>Settings</b><span>' + (modes || settings.objectives.length + (settings.objectives.length === 1 ? ' objective' : ' objectives') + ' · ' + settings.suppliers.length + ' suppliers') + '</span></span></button>';
 }
 
@@ -458,7 +484,9 @@ function settingsPane() {
       (autoAsk ? '<div class="row"><button class="btn btn-primary" data-auto="1">Turn on</button><button class="btn" data-auto="cancel">Cancel</button></div>' : '') + '</div>' +
       '<button class="switch" id="sw-auto" role="switch" aria-checked="' + settings.auto + '" aria-label="Auto mode"></button></div>' +
     '<div class="set-row"><div><b>Aggressive mode</b><p>The agent gets ruthless with suppliers. It names every failure and who owns it, plays suppliers against each other where a real alternative exists, holds contract penalties against them, sets deadlines in hours and escalates to their management. It threatens the relationship in your name: cancelled orders, no future projects, volume moved to a competitor. It does not lie: every fact it states comes from the documents or the mailbox. These emails always wait for your approval.</p></div>' +
-      '<button class="switch" id="sw-aggr" role="switch" aria-checked="' + settings.aggressive + '" aria-label="Aggressive mode"></button></div></div>';
+      '<button class="switch" id="sw-aggr" role="switch" aria-checked="' + settings.aggressive + '" aria-label="Aggressive mode"></button></div>' +
+    '<div class="set-row"><div><b>Forecasting</b><p>The agent looks ahead on its own, about every half hour: it takes stock of everything, simulates the rest of the run, and lists what could still go wrong, each with a response ready. These appear under "Could go wrong" in the list. Each look uses the model, so it costs more to run.</p></div>' +
+      '<button class="switch" id="sw-forecast" role="switch" aria-checked="' + !!settings.forecasting + '" aria-label="Forecasting"></button></div></div>';
 }
 
 function renderSettings() {
@@ -493,17 +521,43 @@ function actionView(a) {
       .map((c) => '<tr><td>' + esc(c.field) + '</td><td>' + esc(c.old_value || 'not recorded') + '</td><td><b>' + esc(c.new_value) + '</b></td></tr>').join('') + '</tbody></table></div></div>';
 }
 
-/* ---------- centre: the decision page ---------- */
-function nextAction(issue) {
-  const waiting = pendingOf(issue);
-  const cards = waiting.map((a) => '<div class="next"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(bare(a.headline)) + '</h3><div class="reason rich">' + rich(a.reason) + '</div>' + (a.human_reason ? '<p class="cap" style="margin-top:8px">' + (a.needs_human ? 'Needs you: ' : 'Routine, would go ahead in auto mode: ') + mdi(a.human_reason) + '</p>' : '') + '</div>' +
+/* ---------- centre: one thing that could go wrong, or the forecast ---------- */
+function lookView() {
+  const x = outlook.scenarios.find((y) => y.id === lookSel);
+  if (!x) return '<div class="detail empty"><div><h1>Nothing selected</h1></div></div>';
+  const issue = issues.get(x.issue_id), open = x.status === 'watching';
+  return '<div class="detail"><header><div class="sevline sev-info">Could go wrong · ' + x.id + ' · ' + LIKELY[x.likelihood][0] + '</div><h1>' + esc(bare(x.what)) + '</h1>' +
+    '<p class="cap" style="margin-top:8px">This has not happened. The aim is that it never does.</p></header>' +
+    '<section><h2>What it would cost</h2><div class="found rich">' + rich(x.impact) + '</div></section>' +
+    '<section><h2>To prevent it</h2>' + (x.prevention ? '<div class="found rich">' + rich(x.prevention) + '</div>' : '<p class="cap">The agent has not recorded a preventive measure.</p>') +
+      measuresWaiting(x).map((a) => '<div style="margin-top:14px">' + approvalCard(a) + '</div>').join('') +
+      measures(x).filter((a) => a.status !== 'pending').map((a) => '<p class="cap" style="margin-top:10px">' + (a.status === 'withdrawn' ? 'Withdrawn' : a.status === 'rejected' ? 'Rejected' : a.outcome === 'done' ? (a.auto ? 'Sent by auto mode' : 'Sent') : a.outcome === 'failed' ? 'Sending failed' : 'Approved') + (a.decided ? ' at ' + clock(a.decided) : '') + ': ' + esc(bare(a.headline)) + '</p>').join('') +
+      (open && x.prevention && !measures(x).length ? '<p class="cap" style="margin-top:10px">No message has been proposed for this. Either the person has no email address on file, so someone has to tell them, or the agent has not got to it yet.</p>' : '') + '</section>' +
+    '<section><h2>Why the agent thinks so</h2><div class="found rich">' + rich(x.why) + '</div></section>' +
+    '<section><h2>The sign that it is happening</h2><div class="found rich">' + rich(x.watch_for) + '</div></section>' +
+    '<section><h2>If it happens anyway</h2><div class="next quiet"><div class="reason rich next-text" style="margin-top:0">' + rich(x.response) + '</div>' +
+      '<p class="cap">The agent proposes this for your approval the moment the scenario happens.</p></div></section>' +
+    (issue ? '<section><h2>Belongs to</h2><button class="linkbtn" data-open="' + issue.id + '">' + esc(bare(issue.title)) + '</button></section>' : '') +
+    '<section class="decide">' + (open
+      ? '<div class="act"><button class="btn" data-settle="' + x.id + '" data-happened="0">No longer a risk</button><span class="cap">Removes it from the list.</span></div>'
+      : '<p class="verdict">' + (x.status === 'happened' ? 'This happened' : 'Ruled out') + (x.settled ? ' at ' + clock(x.settled) : '') + '</p>' + (x.note ? '<p class="cap">' + mdi(x.note) + '</p>' : '')) + '</section></div>';
+}
+
+function approvalCard(a) {
+  return '<div class="next"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(bare(a.headline)) + '</h3><div class="reason rich">' + rich(a.reason) + '</div>' + (a.human_reason ? '<p class="cap" style="margin-top:8px">' + (a.needs_human ? 'Needs you: ' : 'Routine, would go ahead in auto mode: ') + mdi(a.human_reason) + '</p>' : '') + '</div>' +
     actionView(a) +
     '<div class="row"><input class="note-in" id="note-' + a.id + '" type="text" placeholder="Optional note to the agent" aria-label="Note to the agent" autocomplete="off">' +
     '<button class="btn" data-decide="0" data-id="' + a.id + '">Reject</button><button class="btn btn-primary" data-decide="1" data-id="' + a.id + '">' + (a.live ? (a.tool === 'send_email' ? 'Approve and send' : 'Approve and post') : 'Approve') + '</button></div>' +
     '<p class="cap">' + (a.live && a.tool === 'send_email' ? 'Approving sends this email straight away from the team mailbox' + (a.args.translation ? ', in ' + esc(a.args.language) : '') + '. It cannot be recalled.'
       : a.live ? 'Approving enters this in the corrections ledger and posts it to ' + esc(a.args.system) + ' through its adapter.'
       : a.tool === 'update_record' ? 'Approving enters this in the corrections ledger. ' + esc(a.args.system) + ' is not connected, so someone has to change it there.'
-      : 'Approving only records this action. This kind of action is not connected to an outside system yet.') + '</p></div>').join('');
+      : 'Approving only records this action. This kind of action is not connected to an outside system yet.') + '</p></div>';
+}
+
+/* ---------- centre: the decision page ---------- */
+function nextAction(issue) {
+  const waiting = pendingOf(issue);
+  const cards = waiting.map(approvalCard).join('');
   // Whatever is next gets the same card: a small label, the thing itself, one line saying what it means for you.
   const card = (label, body, cap, quiet) => '<div class="next' + (quiet ? ' quiet' : '') + '"><div><div class="sevline sev-info">' + label + '</div><div class="reason rich next-text">' + body + '</div></div><p class="cap">' + cap + '</p></div>';
   let other = '';
@@ -523,6 +577,7 @@ function decisionView(issue) {
     '<header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(bare(issue.title)) + '</h1></header>' +
     '<section><h2>Why</h2><div class="found rich">' + rich(issue.summary) + '</div></section>' +
     '<section><h2>Next action</h2>' + nextAction(issue) + '</section>' +
+    (outlook.scenarios.some((x) => x.issue_id === issue.id && x.status === 'watching') ? '<section><h2>Could go wrong</h2><div class="evidence">' + watching().filter((x) => x.issue_id === issue.id).map((x) => '<button class="linkbtn" style="text-align:left;font-weight:500" data-look="' + x.id + '">' + LIKELY[x.likelihood][0] + ' · ' + esc(bare(x.what)) + '</button>').join('') + '</div></section>' : '') +
     ((issue.corrections || []).length ? '<section><h2>Corrections</h2><div class="scroll"><table><thead><tr><th>Record</th><th>Field</th><th>Was</th><th>Now</th><th></th></tr></thead><tbody>' +
       issue.corrections.map((c) => '<tr><td>' + esc(c.system) + ' · ' + esc(c.record) + '</td><td>' + esc(c.field) + '</td><td>' + esc(c.old_value || 'not recorded') + '</td><td><b>' + esc(c.new_value) + '</b></td><td>' +
         (c.applied_at ? '<span class="cap" title="' + esc(c.applied_note || '') + '">' + (/adapter/.test(c.applied_note || '') ? 'Posted to ' : 'Changed in ') + esc(c.system) + ' ' + esc(stamp(c.applied_at)) + '</span>'
@@ -572,6 +627,8 @@ const WHAT = {
   logged: ['You', 'recorded', 'you'], applied: ['You', 'changed it in the system', 'you'],
   reconciled: ['You', 'reconciled it with the system', 'you'], auto_reconciled: ['Adapter', 'posted the correction', 'auto'],
   withdrawn: ['Agent', 'withdrew its proposal', 'agent'],
+  anticipated: ['Agent', 'anticipated', 'agent'], scenario_happened: ['Agent', 'saw it happen', 'agent'], scenario_passed: ['Agent', 'ruled it out', 'agent'],
+  team_scenario_happened: ['You', 'said it happened', 'you'], team_scenario_passed: ['You', 'ruled it out', 'you'],
   approved: ['You', 'approved', 'you'], rejected: ['You', 'rejected', 'you'], sent: ['You', 'approved and sent', 'you'], failed: ['You', 'approved, sending failed', 'you'],
   mail_sent: ['Email sent', '', 'out'], mail_received: ['Email received', '', 'in'],
 };
@@ -617,9 +674,19 @@ async function loadHistory() {
 
 /* ---------- rendering ---------- */
 function renderCenter(force) {
+  if (view === 'look') {
+    const key = 'look' + lookSel + outlookStamp + [...approvals.values()].filter((a) => a.scenario_id).map((a) => a.status + a.outcome).join();
+    $('viewbar').hidden = true;
+    if (!force && key === shownKey) return;
+    const keep = shownPlace === 'look' + lookSel ? $('center').scrollTop : 0;
+    shownKey = key; shownPlace = 'look' + lookSel;
+    $('view').innerHTML = lookView();
+    $('center').scrollTop = keep;
+    return;
+  }
   const issue = issues.get(selected);
   if (!issue) view = 'decision';
-  const key = !issue ? 'empty' : view + issue.id + issue.updated + of(issue).map((a) => a.status + a.outcome).join() + (issue.corrections || []).map((c) => c.applied_at).join() + (settings.adapters || []).map((a) => a.enabled).join();
+  const key = !issue ? 'empty' : view + issue.id + issue.updated + of(issue).map((a) => a.status + a.outcome).join() + (issue.corrections || []).map((c) => c.applied_at).join() + (settings.adapters || []).map((a) => a.enabled).join() + outlookStamp;
   $('viewbar').hidden = !issue;
   $('tab-decision').className = view === 'decision' ? 'on' : '';
   $('tab-history').className = view === 'history' ? 'on' : '';
@@ -707,6 +774,7 @@ function apply(e) {
     const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('#settings');
     if (settingsOpen && !typing) renderSettings();   // do not pull the form out from under someone typing in it
   }
+  else if (e.kind === 'outlook') { if (!live) return; outlook = e.value; outlookStamp++; schedule(); }
   else if (e.kind === 'status') { $('status').textContent = e.value; $('chat-head').classList.toggle('working', e.value === 'working'); }
   else if (e.kind === 'activity' && e.verb === 'Found') { /* the issue event already made this chip */ }
   else { if (e.kind === 'mail' && e.open) e.history = true; feed.push(e); if (e.kind === 'mail' && live) historyChanged(); }
@@ -737,6 +805,7 @@ document.addEventListener('click', (e) => {
     if (t('#sw-auto')) { if (settings.auto) save({ auto: false }); else { autoAsk = !autoAsk; renderSettings(); } return; }
     if ((el = t('[data-auto]'))) { autoAsk = false; if (el.dataset.auto === '1') save({ auto: true }); else renderSettings(); return; }
     if (t('#sw-aggr')) { save({ aggressive: !settings.aggressive }); return; }
+    if (t('#sw-forecast')) { save({ forecasting: !settings.forecasting }); return; }
     if ((el = t('[data-adapter]'))) { const on = el.getAttribute('aria-checked') !== 'true'; settings.adapters = settings.adapters.map((a) => a.id === el.dataset.adapter ? { ...a, enabled: on } : a); renderAuto(); renderSettings(); post('/api/settings', { adapters: { [el.dataset.adapter]: on } }); return; }
     if ((el = t('[data-obj-move]'))) { const i = Number(el.dataset.objMove), j = i + Number(el.dataset.by), list = [...settings.objectives]; [list[i], list[j]] = [list[j], list[i]]; save({ objectives: list }); return; }
     if ((el = t('[data-obj-del]'))) { save({ objectives: settings.objectives.filter((_, i) => i !== Number(el.dataset.objDel)) }); return; }
@@ -750,6 +819,9 @@ document.addEventListener('click', (e) => {
   if ((el = t('[data-sheet]'))) { sheetOpen.set(el.dataset.path, Number(el.dataset.sheet)); loadEvidence(el.dataset.path); return; }
   if ((el = t('[data-expand]'))) { const k = el.dataset.expand; if (expanded.has(k)) expanded.delete(k); else expanded.add(k); renderCenter(true); return; }
   if ((el = t('[data-msg]'))) { msgLang.set(el.dataset.msg, el.dataset.to); renderCenter(true); return; }
+  if ((el = t('[data-fold]'))) { fold(el.dataset.fold); return; }
+  if ((el = t('[data-look]'))) { lookSel = el.dataset.look; view = 'look'; renderLeft(); renderCenter(true); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
+  if ((el = t('[data-settle]'))) { el.disabled = true; post('/api/scenarios/' + el.dataset.settle, { happened: el.dataset.happened === '1' }); return; }
   if ((el = t('[data-done]'))) { el.disabled = true; post('/api/issues/' + el.dataset.done + '/done', {}); return; }
   if ((el = t('[data-reconcile]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.reconcile + '/reconcile', {}); return; }
   if ((el = t('[data-applied]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.applied + '/applied', { text: '' }); return; }
@@ -794,6 +866,7 @@ async function loadSettings() {
     if (!res.ok) return;
     settings = await res.json();
     renderAuto(); schedule();
+    try { const o = await fetch('/api/outlook'); if (o.ok) { outlook = await o.json(); outlookStamp++; schedule(); } } catch (err) { /* shown empty */ }
     const typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('#settings');
     if (settingsOpen && !typing) renderSettings();
   } catch (err) { /* the page still works on its defaults */ }

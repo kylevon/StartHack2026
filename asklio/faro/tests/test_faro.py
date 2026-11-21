@@ -772,3 +772,132 @@ async def test_an_outside_step_names_its_owner_and_the_team_can_mark_it_done(fol
     await tools["update_issue"].ainvoke({"issue_id": "I-1", "note": "All arrived.", "next_step": "none", "next_owner": "Paul Winter"})
     assert issue.next_owner == ""  # no step, so nobody to wait on
     assert Hub(folder, tmp_path / "state").issues["I-1"].history[-2]["kind"] == "step_done"
+
+
+def test_the_run_calculator_finds_what_stops_the_line_and_when():
+    from faro import simulate
+
+    cases = {"name": "cases", "per_unit": 1, "on_hand": 96000}
+    plan = simulate.run(128000, 6000, 30, [cases | {"arrivals": [{"quantity": 350000, "at_hour": 10}]}])
+    assert plan["made"] == 128000 and plan["short"] == 0 and plan["stops"] == [] and abs(plan["finished_at_hour"] - 21.35) < 0.1
+
+    late = simulate.run(128000, 6000, 30, [cases | {"arrivals": [{"quantity": 350000, "at_hour": 27}]}])
+    assert late["stops"][0]["part"] == "cases" and abs(late["stops"][0]["hour"] - 16) < 0.1 and late["stops"][0]["made_by_then"] == 96000
+    assert 113000 < late["made"] < 115000 and late["short"] == 128000 - late["made"] and abs(late["idle_hours"] - 11) < 0.2  # 3 hours of packing after an 11-hour stop
+
+    never = simulate.run(128000, 6000, 30, [cases])
+    assert never["made"] == 96000 and never["short"] == 32000
+
+    two = simulate.run(25200, 900, 30, [{"name": "art books", "per_unit": 1, "on_hand": 19300}, {"name": "magnets", "per_unit": 4, "on_hand": 200000}])
+    assert two["made"] == 19300 and two["stops"][0]["part"] == "art books" and two["left_over"]["magnets"] == 200000 - 4 * 19300
+    assert "ran out of art books" in simulate.describe(two) and "5,900 short" in simulate.describe(two)
+
+
+async def test_the_outlook_holds_scenarios_with_or_without_an_issue(folder, tmp_path):
+    from faro.tools import make_tools
+
+    hub = Hub(folder, tmp_path / "state")
+    tools = {t.name: t for t in make_tools(hub)}
+    hub.open_issue("Art books short", "blocker", "s", [])
+    scenario = {"what": "The carrier does not confirm a truck by 22:00.", "likelihood": "high", "why": "No confirmation in three hours.",
+                "impact": "5,900 Collector's Editions cannot be packed.", "prevention": "Ask Karton Nowak now to confirm the truck's departure time.",
+                "watch_for": "No email from Warta Trans by 22:00.", "response": "Ask Raj Patel to book Soony's own carrier from Poznań."}
+    assert "Recorded as S-1" in await tools["anticipate"].ainvoke(scenario | {"issue_id": "I-1"})
+    assert "Recorded as S-2" in await tools["anticipate"].ainvoke(scenario | {"what": "Customs holds the Boise shipment in Frankfurt."})  # no issue covers this yet
+    assert "no issue 'I-9'" in await tools["anticipate"].ainvoke(scenario | {"issue_id": "I-9"})
+    issue = hub.issues["I-1"]
+    assert [s["issue_id"] for s in hub.scenarios] == ["I-1", ""] and not hub.approvals  # a possibility asks nothing of anyone
+    assert issue.history[-1]["kind"] == "anticipated" and issue.history[-1]["ref"] == "S-1"
+    assert any(e["kind"] == "outlook" and len(e["value"]["scenarios"]) == 2 for e in hub.events)  # the page is told
+
+    assert "ran out" in await tools["simulate_run"].ainvoke({"units_needed": 25200, "rate_per_hour": 900, "hours_available": 30, "parts": [{"name": "art books", "per_unit": 1, "on_hand": 19300}]})
+    assert "set_forecast" not in tools  # the agent records scenarios and their measures, not a forecast
+
+    hub.settle_scenario("S-2", happened=True, by_team=True)  # the reviewer clicks "this happened" on the one with no issue
+    assert hub.scenarios[1]["status"] == "happened" and "opening an issue for it first" in hub.inbox[-1] and "book Soony's own carrier" in hub.inbox[-1]
+    assert "settled as passed" in await tools["settle_scenario"].ainvoke({"scenario_id": "S-1", "happened": False, "note": "The truck was confirmed."})
+    assert issue.history[-1]["kind"] == "scenario_passed"
+    assert "already settled" in await tools["settle_scenario"].ainvoke({"scenario_id": "S-1", "happened": True})
+
+    for n in range(8):
+        await tools["anticipate"].ainvoke(scenario | {"what": f"Variant {n}."})
+    assert "already holds eight open scenarios" in await tools["anticipate"].ainvoke(scenario | {"what": "A ninth."})
+
+    assert not hub.forecasting and "Forecasting is off" in hub.directives()  # off until the team switches it on
+    before = len(hub.inbox)
+    hub.update_settings(forecasting=True)
+    assert hub.settings()["forecasting"] and "Forecasting is on" in hub.inbox[before] and hub.inbox[-1].startswith("[lookahead]") and "not only your open issues" in hub.inbox[-1]
+    again = Hub(folder, tmp_path / "state")
+    assert again.forecasting  # the switch survives a restart
+    assert [s["status"] for s in again.scenarios][:2] == ["passed", "happened"]
+
+
+async def test_the_look_ahead_timer_only_fires_while_forecasting_is_on(folder, tmp_path):
+    from faro.agent import look_ahead_regularly
+
+    hub = Hub(folder, tmp_path / "state")
+    timer = asyncio.create_task(look_ahead_regularly(hub, 0.02 / 60))
+    try:
+        await asyncio.sleep(0.12)
+        assert not any(m.startswith("[lookahead]") for m in hub.inbox)
+        hub.update_settings(forecasting=True)
+        hub.drain()
+        await until(lambda: sum(m.startswith("[lookahead]") for m in hub.inbox) >= 2)
+        hub.update_settings(forecasting=False)
+        hub.drain()
+        await asyncio.sleep(0.12)
+        assert not any(m.startswith("[lookahead]") for m in hub.inbox)
+    finally:
+        timer.cancel()
+
+
+def test_a_path_recorded_with_the_folder_name_in_front_still_opens(folder):
+    assert files.read(folder, f"{folder.name}/context/notes.md") == files.read(folder, "context/notes.md")
+    assert files.preview(folder, f"{folder.name}/erp.csv")["kind"] == "tables"
+    with pytest.raises(files.FileError):
+        files.read(folder, f"{folder.name}/../secret.txt")
+    with pytest.raises(files.FileError):
+        files.read(folder, f"{folder.name}/nothing-here.txt")
+
+
+async def test_a_scenario_is_prevented_with_a_measure_proposed_now(folder, tmp_path):
+    from faro.tools import make_tools
+
+    sent = []
+
+    async def send(approval):
+        sent.append(approval.args["to"])
+        approval.thread_id = "t9"
+        return "Sent."
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.executors["send_email"] = send
+    tools = {t.name: t for t in make_tools(hub)}
+    hub.open_issue("Art books short", "blocker", "s", [])
+    base = {"what": "The art books reach the line too late.", "likelihood": "high", "why": "No truck confirmed.", "impact": "900 copies an hour.",
+            "prevention": "Remind Karton Nowak that the truck has to leave by 04:00.", "watch_for": "No departure time by 03:00.", "response": "Book our own carrier."}
+    told = await tools["anticipate"].ainvoke(base | {"issue_id": "I-1"})
+    assert "Now act to prevent it" in told and hub.scenarios[0]["prevention"].startswith("Remind Karton Nowak")
+    await tools["anticipate"].ainvoke(base | {"what": "Customs holds the Boise shipment."})  # belongs to no issue
+
+    reminder = {"headline": "Remind Karton Nowak of the 04:00 departure", "reason": "So the truck is not late.", "needs_human": False, "human_reason": "A reminder; commits nothing.",
+                "to": ["a.nowak@supplier.example"], "to_name": "A. Nowak", "language": "Polish", "brief": "Reminder\n\nPlease confirm the departure time."}
+    assert "Queued as A-1" in await tools["send_email"].ainvoke(reminder | {"scenario_id": "S-1"})
+    first = hub.approvals["A-1"]
+    assert (first.scenario_id, first.issue_id) == ("S-1", "I-1") and hub.issues["I-1"].history[-1]["text"].endswith("(to prevent S-1)")  # the issue is taken from the scenario
+    assert "Queued as A-2" in await tools["send_email"].ainvoke(reminder | {"scenario_id": "S-2"})
+    assert (hub.approvals["A-2"].scenario_id, hub.approvals["A-2"].issue_id) == ("S-2", "")  # a measure can stand without an issue
+    assert "no scenario 'S-9'" in await tools["send_email"].ainvoke(reminder | {"scenario_id": "S-9"})
+    assert "say which issue this is for" in await tools["send_email"].ainvoke(reminder)
+    assert sent == []  # nothing goes out on the agent's say-so
+
+    await hub.decide("A-2", approved=True)  # approving a measure that has no issue works, and sends
+    assert sent == [["a.nowak@supplier.example"]] and hub.approvals["A-2"].outcome == "done" and "against scenario S-2" in hub.inbox[-1]
+    hub.set_auto(True)  # with auto mode on, the routine reminder goes out by itself
+    await until(lambda: hub.approvals["A-1"].status == "approved")
+    assert hub.approvals["A-1"].auto and hub.issues["I-1"].thread_ids == ["t9"]
+
+    hub.settle_scenario("S-2", happened=False)
+    assert "already settled" in await tools["send_email"].ainvoke(reminder | {"scenario_id": "S-2"})  # nothing left to prevent
+    again = Hub(folder, tmp_path / "state")
+    assert again.approvals["A-2"].scenario_id == "S-2" and again.scenarios[0]["prevention"].startswith("Remind")

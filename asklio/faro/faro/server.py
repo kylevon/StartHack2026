@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import config, files, mail
-from .agent import AgentRunner, watch_folder
+from .agent import AgentRunner, look_ahead_regularly, watch_folder
 from .hub import Hub
 
 
@@ -20,6 +20,10 @@ class ChatIn(BaseModel):
 
 class NoteIn(BaseModel):
     text: str = ""
+
+
+class ScenarioIn(BaseModel):
+    happened: bool
 
 
 class RichIn(BaseModel):
@@ -45,6 +49,7 @@ class SettingsIn(BaseModel):
     objectives: list[str] | None = None
     suppliers: list[SupplierIn] | None = None
     adapters: dict[str, bool] | None = None
+    forecasting: bool | None = None
 
 
 class DecisionIn(BaseModel):
@@ -57,9 +62,22 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
     async def lifespan(app: FastAPI):
         hub = Hub(data_dir or config.DATA_DIR, state_dir or config.STATE_DIR, config.DATABASE_URL if database_url is None else database_url)
         app.state.hub = hub
-        tasks = [asyncio.create_task(watch_folder(hub, poll_seconds or config.POLL_SECONDS))]
+        tasks = []
         try:
             chosen = model or config.MODEL
+            if chosen == "off":
+                # No agent and no watchers: the record can be read and decided on, and nothing new is announced to
+                # an agent that is not there. Mail and files that arrive meanwhile are picked up at the next real start.
+                hub.emit("status", value="paused")
+                if config.MAIL_ENABLED and mailbox is not False:
+                    # A person approving an email is a decision that needs no agent: it is still sent. Nothing watches for the reply until the agent is back.
+                    hub.mailbox = mailbox or mail.Mailbox(config.MAIL_INBOX, config.MAIL_API_KEY)
+                    hub.executors["send_email"] = mail.sender(hub, hub.mailbox)
+                yield
+                hub.store.close()
+                return
+            tasks.append(asyncio.create_task(watch_folder(hub, poll_seconds or config.POLL_SECONDS)))
+            chosen_name = chosen if isinstance(chosen, str) else ""
             if config.MAIL_ENABLED and chosen != "scripted" and mailbox is not False:  # the scripted stand-in must never send real mail
                 hub.mailbox = mailbox or mail.Mailbox(config.MAIL_INBOX, config.MAIL_API_KEY)
                 hub.executors["send_email"] = mail.sender(hub, hub.mailbox)
@@ -81,6 +99,8 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
 
                 chosen = ScriptedModel()
             tasks.append(asyncio.create_task(AgentRunner(hub, chosen).run_forever()))
+            if chosen_name != "scripted":
+                tasks.append(asyncio.create_task(look_ahead_regularly(hub, config.LOOKAHEAD_MINUTES)))
         except Exception as err:  # most often: no API key for the chosen provider
             hub.emit("error", text=f"The agent could not start ({type(err).__name__}: {err}). Add the key to .env.local in the repo root, e.g. ANTHROPIC_API_KEY=..., and restart.")
         yield
@@ -120,6 +140,19 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
             raise HTTPException(400, "Empty message.")
         app.state.hub.chat(body.text.strip())
         return {"ok": True}
+
+    @app.get("/api/outlook")
+    async def get_outlook():
+        return app.state.hub.outlook()
+
+    @app.post("/api/scenarios/{scenario_id}")
+    async def settle(scenario_id: str, body: ScenarioIn):
+        try:
+            return app.state.hub.settle_scenario(scenario_id, body.happened, by_team=True)
+        except KeyError:
+            raise HTTPException(404, f"No scenario {scenario_id}.") from None
+        except ValueError as err:
+            raise HTTPException(409, str(err)) from None
 
     @app.post("/api/issues/{issue_id}/done")
     async def done(issue_id: str):
@@ -180,7 +213,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
     @app.post("/api/settings")
     async def set_settings(body: SettingsIn):
         suppliers = None if body.suppliers is None else [s.model_dump() for s in body.suppliers if s.name.strip()]
-        return app.state.hub.update_settings(body.auto, body.aggressive, body.objectives, suppliers, adapters_on=body.adapters)
+        return app.state.hub.update_settings(body.auto, body.aggressive, body.objectives, suppliers, adapters_on=body.adapters, forecasting=body.forecasting)
 
     @app.post("/api/auto")
     async def auto(body: AutoIn):

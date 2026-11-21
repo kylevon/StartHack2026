@@ -4,6 +4,56 @@ One entry per portal snapshot, newest first. The data itself is not in git: get 
 
 <!-- new entries go below this line -->
 
+## 2026-11-21 22:26 snapshot
+
+Snapshot `cde498bb9627acef`, 332 files (19 added since the 16:09 snapshot, 0 changed, 0 removed).
+
+The sync script reported "332 added, 303 removed" on this machine. That was the local folder still holding Friday's snapshot one directory too deep (`soony-data/soony-data/`), not a change at the portal. The list below is the real difference to the 16:09 snapshot.
+
+### Added
+- `soony/erp/stock_update_2026-11-21.xlsx`
+- `soony/erp/goods_receipts_update.csv`
+- `soony/news/2026-11-21_export_controls.json`
+- `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
+- `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
+- `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
+- `soony/receiving/DC-HAM/20260903_DN-260831-382.jpg`
+- `soony/receiving/DC-HAM/20260903_WZ-260902-594.jpg`
+- `soony/receiving/DC-HAM/20260904_SN-260730-216.jpg`
+- `soony/receiving/DC-HAM/20260914_SN-260810-719.png`
+- `soony/receiving/DC-HAM/20261009_WZ-261007-399.png`
+- `soony/receiving/DC-HAM/20261106_DN-261102-986.jpg`
+- `soony/receiving/DC-HAM/20261110_SN-261007-130.jpg`
+- `soony/receiving/DC-HAM/20261111_DN-261106-613.png`
+- `soony/receiving/DC-HAM/20261113_WZ-261110-805.jpg`
+- `suppliers/SUP-0018_Pune_Diecast_Works/profile.json`
+- `suppliers/SUP-0029_Guangzhou_PackRight/profile.json`
+- `suppliers/SUP-0029_Guangzhou_PackRight/components_delta.csv`
+- `suppliers/SUP-0029_Guangzhou_PackRight/notices/Supply_notice_export_licence_2026-11-21.pdf`
+
+### What it means
+Read on Sat 21 Nov, 22:30. Stock figures are book stock, not counted.
+
+**Where the pack-out stands** (`stock_update_2026-11-21.xlsx`, Sat 20:50): Standard 602,000 packed, 38,000 to go. Collector's 60,300 packed, 11,700 to go. Saturday packed 90,000 Standard and 13,500 Collector's, so both ran at plan rate all day. Sunday has 14 hours: room for 84,000 Standard and 12,600 Collector's, so time is not the limit. Parts are.
+
+**Book stock still carries the known errors.** Corrected for them:
+- Art books: 77,800 on the books, 5,800 real (the 72,000 that never arrived are still in). Against 11,700: 5,900 short. At 900 an hour the cell runs out of art books around Sunday 11:15.
+- Statues: 13,900 on the books, 8,300 good (the failed lot of 5,600 is still in). 3,400 short; they run out around Sunday 14:45.
+- Game card cases: 6,000 left. Standard stops for want of cases before Saturday's shift ends. The 350,000 at the Hamburg terminal are still not collected.
+- Game cards: 42,900 after the air receipt. Collector's takes 11,700 first (CPO memo), which leaves 31,200 for 38,000 Standard: 6,800 short.
+- Sleeves: 116,000 on the books. That includes the 64,000 rev B batch and the 4,000 Grand Heist 5 sleeves below, so about 48,000 rev C if Saturday packed only rev C. To confirm at the DC.
+
+**Receipts of today** (`goods_receipts_update.csv`):
+- Hwaseong: 28,000 of 48,000 game cards received, the balance per shipping advice (24 Nov).
+- Karton Nowak: 20,000 sleeves booked, but one pallet labelled GH6 holds 4,000 Grand Heist 5 sleeves (CMP-GAM-005). Only 16,000 rev C arrived; the booking overstates GH6 sleeves by 4,000.
+- Boise: 10,500 Grand Heist 5 cards. No use for the launch.
+
+**Rare-earth magnets: a problem for after the launch.** China now requires export licences for sintered NdFeB magnets (`2026-11-21_export_controls.json`). PackRight's magnet supplier has stopped shipping (`Supply_notice_export_licence`); Collector's boxes with delivery after 1 Dec move out six weeks, and `components_delta.csv` raises the box lead time from 63 to 105 days with no second source for the magnet. Boxes confirmed for November are covered. PackRight is now flagged "at risk" in the vendor master (`profile.json`) and offers ferrite or ribbon closures to sample within 10 days.
+
+**Pune's qualification has lapsed** (`SUP-0018 profile.json`): conditional release valid until 2026-10-30, not extended, status "watch". The failed statue lot came from a supplier with no valid release, which matters for the concession decision.
+
+**Nine older delivery-note scans** (September to mid-November) were added to `receiving/DC-HAM/`. Not reviewed yet.
+
 ## 2026-11-21 16:09 snapshot
 
 Snapshot `2615a73134ffad8f`, 313 files (10 added, 1 changed, 0 removed).

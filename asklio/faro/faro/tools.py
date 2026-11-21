@@ -11,10 +11,10 @@ from typing import Literal
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from . import files, mail
+from . import files, mail, simulate
 from .hub import Hub
 
-READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail", "list_corrections", "list_suppliers"}
+READ_TOOLS = {"list_files", "read_file", "search_files", "list_mail", "read_mail", "list_corrections", "list_suppliers", "simulate_run"}
 
 Severity = Literal["blocker", "risk", "info"]
 
@@ -41,7 +41,8 @@ class UpdateIssue(BaseModel):
 
 
 class Proposal(BaseModel):
-    issue_id: str = Field(description="The issue this action is for. Open one first if there is none.")
+    issue_id: str = Field(default="", description="The issue this action is for. Open one first if there is none, unless the action is a measure against a scenario.")
+    scenario_id: str = Field(default="", description="Set this when the action is there to stop a scenario from happening: a reminder, a heads-up, a request to confirm. The issue is then taken from the scenario, if it has one.")
     headline: str = Field(description="The action in a few words, e.g. 'Ask the supplier how many were shipped'.")
     reason: str = Field(description="Why this action, to this recipient, now. The issue already explains the problem; do not repeat it.")
     needs_human: bool = Field(description="Whether a person has to decide this. True for anything that commits money or goods, places, changes or cancels an order, accepts, promises or concedes something, goes to someone for a decision, or that you are unsure about. False only for asking for information or status, confirming receipt, chasing an answer already asked for, or bringing a record in line with something already confirmed in writing at no cost. With auto mode on, false means it is carried out at once without anyone reading it.")
@@ -61,6 +62,36 @@ class EditFile(Proposal):
     path: str = Field(description="File to change, relative to the document folder.")
     find: str = Field(description="Exact text to replace. Must occur in the file.")
     replace: str = Field(description="Text to put in its place.")
+
+
+class Anticipate(BaseModel):
+    issue_id: str = Field(default="", description="The issue this belongs to, if one exists. Leave empty when it is about something no issue covers yet.")
+    what: str = Field(description="What could go wrong, as one plain sentence about an event that has not happened: 'The carrier does not confirm a truck by 22:00.'")
+    likelihood: Literal["high", "medium", "low"] = Field(description="Your honest estimate of how likely it is, from what the documents and the mailbox show.")
+    why: str = Field(description="What makes you rate it so: the evidence, in a sentence or two.")
+    impact: str = Field(description="What it would cost if it happened, with a number. Work the number out with simulate_run where the question is how much gets made or packed.")
+    prevention: str = Field(description="What can be done now so that it does not happen: who to remind, warn or ask to confirm, and of what. If that person has an email address, propose that email straight after recording the scenario. If they have none, this sentence is what the team reads to know whom to call.")
+    watch_for: str = Field(description="The sign that it is happening, and by when it would show: a missing confirmation, a status that does not change, a deadline passing.")
+    response: str = Field(description="The fallback if it happens anyway. What you would propose the moment it does: who to write to or what to change, and what to ask for. Specific enough to act on without thinking again.")
+
+
+class Arrival(BaseModel):
+    quantity: float
+    at_hour: float = Field(description="Hours from the start of the run at which it is on the line and usable.")
+
+
+class Part(BaseModel):
+    name: str
+    per_unit: float = Field(description="How many of this part one finished unit takes.")
+    on_hand: float = Field(description="Usable stock at the start.")
+    arrivals: list[Arrival] = Field(default_factory=list, description="Deliveries expected during the run.")
+
+
+class SimulateRun(BaseModel):
+    units_needed: float = Field(description="How many finished units still have to be made.")
+    rate_per_hour: float = Field(description="How many the line makes per hour when nothing is missing.")
+    hours_available: float = Field(description="Working hours left until the deadline.")
+    parts: list[Part] = Field(description="Every part that could run out. Leave out parts that are plentiful.")
 
 
 class Supplier(BaseModel):
@@ -110,6 +141,20 @@ def make_tools(hub: Hub) -> list:
         except files.FileError as err:
             return f"Error: {err}"
 
+    def place(proposal) -> str | None:
+        """Work out where a proposal belongs: its issue, or the scenario it is meant to prevent. Returns an error for the agent, or None."""
+        if proposal.scenario_id:
+            scenario = next((s for s in hub.scenarios if s["id"] == proposal.scenario_id), None)
+            if scenario is None:
+                return f"Error: there is no scenario '{proposal.scenario_id}'. Record it with anticipate first."
+            if scenario["status"] != "watching":
+                return f"Error: scenario {proposal.scenario_id} is already settled ({scenario['status']}), so there is nothing left to prevent."
+            proposal.issue_id = proposal.issue_id or scenario["issue_id"]
+            return None if not proposal.issue_id else unknown(proposal.issue_id)
+        if not proposal.issue_id:
+            return "Error: say which issue this is for (issue_id), or which scenario it is meant to prevent (scenario_id)."
+        return unknown(proposal.issue_id)
+
     def unknown(issue_id: str) -> str | None:
         if issue_id not in hub.issues:
             return f"Error: there is no issue '{issue_id}'. Existing issues: {', '.join(hub.issues) or 'none'}. Open one with open_issue first."
@@ -142,17 +187,17 @@ def make_tools(hub: Hub) -> list:
         return f"{approval_id} withdrawn. It no longer waits for anyone."
 
     def queue(name: str, proposal: Proposal) -> str:
-        if error := unknown(proposal.issue_id):
+        if error := place(proposal):
             return error
-        args = proposal.model_dump(exclude={"issue_id", "headline", "reason", "needs_human", "human_reason"})
-        approval = hub.propose(name, args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason)
+        args = proposal.model_dump(exclude={"issue_id", "scenario_id", "headline", "reason", "needs_human", "human_reason"})
+        approval = hub.propose(name, args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason, proposal.scenario_id)
         return f"Queued as {approval.id}. Whether it is done is not decided yet. Carry on with other work; the outcome arrives as an [approval] message."
 
     @tool(args_schema=SendEmail)
     async def send_email(**kwargs) -> str:
         """Propose an email to anyone, inside or outside the team. Needs human approval before it is sent; once approved it really goes out from the team mailbox and cannot be recalled."""
         proposal = SendEmail(**kwargs)
-        if error := unknown(proposal.issue_id):
+        if error := place(proposal):
             return error
         bad = [a for a in proposal.to + proposal.cc if not mail.ADDRESS.match(a)]
         if not proposal.to or bad:
@@ -174,8 +219,8 @@ def make_tools(hub: Hub) -> list:
                 draft = await hub.write_email(proposal.to_name, proposal.language, proposal.brief, thread)
             except Exception as err:
                 return f"Error: the email could not be drafted ({type(err).__name__}: {err}). Try again."
-        args = proposal.model_dump(exclude={"issue_id", "headline", "reason", "needs_human", "human_reason"}) | draft | {"earlier": earlier}
-        approval = hub.propose("send_email", args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason)
+        args = proposal.model_dump(exclude={"issue_id", "scenario_id", "headline", "reason", "needs_human", "human_reason"}) | draft | {"earlier": earlier}
+        approval = hub.propose("send_email", args, proposal.issue_id, proposal.headline, proposal.reason, proposal.needs_human, proposal.human_reason, proposal.scenario_id)
         note = ""
         if earlier:
             note = f" Note: the mailbox already holds {len(earlier)} message(s) with this recipient, the latest {earlier[0]['direction']} \"{earlier[0]['subject']}\" (thread {earlier[0]['thread_id']}). The reviewer sees them next to your proposal. If this one repeats something already sent, say so with tell_team so it can be rejected."
@@ -212,6 +257,39 @@ def make_tools(hub: Hub) -> list:
             return "The ledger is empty: no record has been corrected, so the exports stand as they are."
         return "\n".join(f"{c['system']} | {c['record']} | {c['field']}: {c['old_value'] or '?'} -> {c['new_value']} | issue {c['issue_id']} | {'changed in the system' if c['applied_at'] else 'approved, not yet changed in the system'}" for c in rows)
 
+    @tool(args_schema=SimulateRun)
+    async def simulate_run(**kwargs) -> str:
+        """Work out how a production or packing run goes: how many units get made in the hours available, and which part stops the line first and when. Run it once for the plan as it stands and once for each thing that could go wrong (a delivery late, short or missing), and compare. It calculates; it does not guess."""
+        spec = SimulateRun(**kwargs)
+        if spec.rate_per_hour <= 0 or spec.hours_available <= 0:
+            return "Error: the rate and the hours available must be above zero."
+        return simulate.describe(simulate.run(spec.units_needed, spec.rate_per_hour, spec.hours_available, [p.model_dump() for p in spec.parts]))
+
+    @tool(args_schema=Anticipate)
+    async def anticipate(**kwargs) -> str:
+        """Record something that could still go wrong, before it happens: how likely, what it would cost, what can be done now to prevent it, the sign that it is happening anyway, and the fallback. It may belong to an issue or to none. Recording it asks nothing of the team; the preventive measure is a separate proposal you make right afterwards with scenario_id."""
+        spec = Anticipate(**kwargs)
+        if spec.issue_id and (error := unknown(spec.issue_id)):
+            return error
+        watching = [s for s in hub.scenarios if s["status"] == "watching"]
+        if len(watching) >= 8:
+            return f"Not added: the outlook already holds eight open scenarios ({', '.join(s['id'] for s in watching)}). Settle those that no longer apply with settle_scenario first, and keep only the ones most worth watching."
+        scenario = hub.anticipate(**spec.model_dump())
+        return (f"Recorded as {scenario['id']}. Now act to prevent it: if the measure is an email to someone with an address, propose it with send_email and scenario_id='{scenario['id']}'. "
+                f"A plain reminder or request to confirm commits nothing, so it does not need a person. If it happens anyway, call settle_scenario('{scenario['id']}', happened=True) and propose your fallback; "
+                "if it can no longer happen, settle it as not happened.")
+
+    @tool
+    async def settle_scenario(scenario_id: str, happened: bool, note: str = "") -> str:
+        """Close a scenario you recorded with anticipate: it has happened (then propose the response you prepared), or it can no longer happen. `note` says how you know, in one sentence."""
+        try:
+            scenario = hub.settle_scenario(scenario_id, happened, note)
+        except KeyError:
+            return f"Error: there is no scenario '{scenario_id}'."
+        except ValueError as err:
+            return f"Error: {err}"
+        return f"{scenario_id} settled as {scenario['status']}." + (f" Now propose what you prepared: {scenario['response']}" if happened else "")
+
     @tool
     async def list_suppliers() -> str:
         """The supplier list the team keeps: who to write to at each supplier, at which address, in which language. Where it differs from the documents, the list is right."""
@@ -237,7 +315,7 @@ def make_tools(hub: Hub) -> list:
         hub.update_settings(suppliers=suppliers, by_agent=True)
         return f"Saved {entry['name']}. The list now holds {len(suppliers)} suppliers."
 
-    tools = [list_files, read_file, search_files, list_corrections, list_suppliers, save_supplier, open_issue, update_issue, tell_team, send_email, edit_file, update_record, withdraw_proposal]
+    tools = [list_files, read_file, search_files, list_corrections, list_suppliers, save_supplier, simulate_run, open_issue, update_issue, anticipate, settle_scenario, tell_team, send_email, edit_file, update_record, withdraw_proposal]
     if hub.mailbox is not None:
 
         @tool

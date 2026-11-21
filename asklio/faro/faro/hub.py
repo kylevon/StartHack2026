@@ -51,6 +51,7 @@ class Approval:
     needs_human: bool = True  # the agent's own call; anything it did not mark stays with a person
     human_reason: str = ""
     auto: bool = False  # approved by auto mode, not by a person
+    scenario_id: str = ""  # set when this is a measure to stop a scenario from happening; issue_id may then be empty
     created: float = field(default_factory=time.time)
     decided: float | None = None
 
@@ -86,6 +87,10 @@ class Hub:
         self.objectives: list[str] = self.store.setting("objectives", [])  # what the team wants, most important first
         self.suppliers: list[dict] = self.store.setting("suppliers", [])  # the contact list the team and the agent share
         self.adapters_on: dict = self.store.setting("adapters", {})  # adapter id -> enabled: where approved corrections are posted
+        # The outlook: what could still go wrong, whether or not an issue exists for it yet, and where things end up if nothing changes.
+        self.forecasting: bool = self.store.setting("forecasting", False)  # whether the agent looks ahead on its own; each look costs model tokens
+        self.scenarios: list[dict] = self.store.setting("scenarios", [])  # {id, issue_id, what, likelihood, why, impact, watch_for, response, status}
+        self.forecast: dict = self.store.setting("forecast", {})  # {summary, ts}: the agent's latest look ahead
         self.restored = bool(self.events)
         # Record changes approved before the ledger existed belong in it too.
         entered = {c["approval_id"] for c in self.store.corrections()}
@@ -145,7 +150,62 @@ class Hub:
         if isinstance(changes, dict):  # proposals from before the ledger carried only the new values
             changes = [{"field": k, "old_value": "", "new_value": v} for k, v in changes.items()]
         for change in changes:
-            self.store.add_correction(approval.id, approval.issue_id, approval.args.get("system", ""), approval.args.get("record", ""), change["field"], change.get("old_value", ""), change["new_value"])
+            self.store.add_correction(approval.id, approval.issue_id or "", approval.args.get("system", ""), approval.args.get("record", ""), change["field"], change.get("old_value", ""), change["new_value"])
+
+    # ----- looking ahead: what could still go wrong, and what is ready if it does -----
+    LOOK_AHEAD = (
+        "[lookahead] Time to look ahead. Take stock of everything as it stands now, not only your open issues: stock against what is still to be made, "
+        "deliveries on the way and their latest status, replies you are waiting for, and the deadlines of the next hours. Simulate the rest of the run for "
+        "each product line with simulate_run, once as things stand and once for each failure that is likely. Then bring your scenarios up to date: "
+        "anticipate what has become likely (linked to an issue or not) and propose the measure that prevents "
+        "each one now, and settle scenarios that have happened or can no longer happen. Keep only the handful most worth watching. If nothing has changed since you last looked, say so in one line and stop."
+    )
+
+    def outlook(self) -> dict:
+        return {"scenarios": self.scenarios, "forecast": self.forecast}
+
+    def _show_outlook(self) -> None:
+        self.store.set_setting("scenarios", self.scenarios)
+        self.store.set_setting("forecast", self.forecast)
+        self.emit("outlook", value=self.outlook())
+
+    def look_ahead(self) -> None:
+        """Ask the agent for a look ahead over the whole current state."""
+        self.inject(self.LOOK_AHEAD)
+
+    def set_forecast(self, summary: str) -> dict:
+        self.forecast = {"summary": summary.strip(), "ts": time.time()}
+        self._show_outlook()
+        return self.forecast
+
+    def anticipate(self, what: str, likelihood: str, why: str, impact: str, watch_for: str, response: str, issue_id: str = "", prevention: str = "") -> dict:
+        scenario = {"id": f"S-{len(self.scenarios) + 1}", "issue_id": issue_id, "what": what.strip(), "likelihood": likelihood, "why": why.strip(), "impact": impact.strip(),
+                    "prevention": prevention.strip(), "watch_for": watch_for.strip(), "response": response.strip(), "status": "watching", "note": "", "created": time.time(), "settled": None}
+        self.scenarios.append(scenario)
+        self._show_outlook()
+        if issue_id:
+            self._log(self.issues[issue_id], "anticipated", f"{scenario['what']} ({likelihood} likelihood). {scenario['impact']}", scenario["id"])
+        return scenario
+
+    def settle_scenario(self, scenario_id: str, happened: bool, note: str = "", by_team: bool = False) -> dict:
+        """A scenario stops being a possibility: it happened, or it can no longer happen."""
+        scenario = next((s for s in self.scenarios if s["id"] == scenario_id), None)
+        if scenario is None:
+            raise KeyError(scenario_id)
+        if scenario["status"] != "watching":
+            raise ValueError(f"{scenario_id} was already settled: {scenario['status']}.")
+        scenario.update(status="happened" if happened else "passed", note=note.strip(), settled=time.time())
+        self._show_outlook()
+        issue = self.issues.get(scenario["issue_id"])
+        if issue:
+            self._log(issue, ("team_" if by_team else "") + f"scenario_{scenario['status']}", scenario["what"] + (f" {note.strip()}" if note.strip() else ""), scenario_id)
+        where = f" on issue {issue.id} ({issue.title})" if issue else ""
+        if by_team and happened:
+            self.inject(f"[log] The team says this has now happened{where}, despite what was done to prevent it: \"{scenario['what']}\". The response you prepared was: \"{scenario['response']}\". "
+                        "Check it still fits what you know, then propose it straight away" + ("." if issue else ", opening an issue for it first."))
+        elif by_team:
+            self.inject(f"[log] The team says this can no longer happen{where}: \"{scenario['what']}\". Stop watching for it.")
+        return scenario
 
     def step_done(self, issue_id: str) -> Issue:
         """The team says the step that had to happen outside Faro has happened. Faro cannot see that for itself."""
@@ -226,13 +286,21 @@ class Hub:
         return issue
 
     # ----- approvals -----
-    def propose(self, tool: str, args: dict, issue_id: str, headline: str, reason: str, needs_human: bool = True, human_reason: str = "") -> Approval:
+    def _note(self, approval: Approval, kind: str, text: str) -> None:
+        """Record something about a proposal in its issue's history. A measure against a scenario that belongs to no issue has none."""
+        issue = self.issues.get(approval.issue_id)
+        if issue:
+            self._log(issue, kind, text, approval.id)
+        if approval.scenario_id:
+            self._show_outlook()  # the scenario's page shows its measures
+
+    def propose(self, tool: str, args: dict, issue_id: str, headline: str, reason: str, needs_human: bool = True, human_reason: str = "", scenario_id: str = "") -> Approval:
         live = tool in self.executors or (tool == "update_record" and adapters.find(args.get("system", ""), self.adapters_on) is not None)
         approval = Approval(f"A-{len(self.approvals) + 1}", issue_id, tool, args, headline, reason, live=live,
-                            needs_human=needs_human, human_reason=human_reason)
+                            needs_human=needs_human, human_reason=human_reason, scenario_id=scenario_id)
         self.approvals[approval.id] = approval
         self._put(approval)
-        self._log(self.issues[issue_id], "proposed", headline, approval.id)
+        self._note(approval, "proposed", headline + (f" (to prevent {scenario_id})" if scenario_id else ""))
         self._run_auto()
         return approval
 
@@ -241,7 +309,7 @@ class Hub:
 
     # ----- settings the team controls -----
     def settings(self) -> dict:
-        return {"auto": self.auto, "aggressive": self.aggressive, "objectives": self.objectives, "suppliers": self.suppliers,
+        return {"auto": self.auto, "aggressive": self.aggressive, "forecasting": self.forecasting, "objectives": self.objectives, "suppliers": self.suppliers,
                 "adapters": [{"id": a.id, "name": a.name, "system": a.system, "description": a.description, "simulated": a.simulated, "enabled": bool(self.adapters_on.get(a.id))} for a in adapters.ADAPTERS]}
 
     def directives(self) -> str:
@@ -275,6 +343,10 @@ class Hub:
                 for s in self.suppliers))
         else:
             parts.append("The supplier list is empty. Fill it with save_supplier from what the documents say about each supplier: name, contact person, email address, language.")
+        if self.forecasting:
+            parts.append("Forecasting is on. Look ahead: you will be told [lookahead] at intervals, and you may anticipate and simulate whenever something changes.")
+        else:
+            parts.append("Forecasting is off. Do not anticipate scenarios or run simulations on your own; deal with what has happened.")
         on = [a for a in adapters.ADAPTERS if self.adapters_on.get(a.id)]
         if on:
             parts.append("Reconciliation is on for: " + ", ".join(f"{a.system} (through the {a.name} adapter)" for a in on)
@@ -283,7 +355,7 @@ class Hub:
             parts.append("No system is connected for reconciliation. An approved correction only enters the ledger; someone has to change the system by hand.")
         return "\n\n".join(parts)
 
-    def update_settings(self, auto: bool | None = None, aggressive: bool | None = None, objectives: list[str] | None = None, suppliers: list[dict] | None = None, by_agent: bool = False, adapters_on: dict | None = None) -> dict:
+    def update_settings(self, auto: bool | None = None, aggressive: bool | None = None, objectives: list[str] | None = None, suppliers: list[dict] | None = None, by_agent: bool = False, adapters_on: dict | None = None, forecasting: bool | None = None) -> dict:
         tell = []
         if auto is not None and auto != self.auto:
             self.auto = auto
@@ -303,6 +375,12 @@ class Hub:
             self.store.set_setting("suppliers", suppliers)
             if not by_agent:
                 tell.append("the supplier list")
+        start_looking = False
+        if forecasting is not None and forecasting != self.forecasting:
+            self.forecasting = forecasting
+            self.store.set_setting("forecasting", forecasting)
+            tell.append("whether you look ahead")
+            start_looking = forecasting
         if adapters_on is not None:
             merged = self.adapters_on | {k: bool(v) for k, v in adapters_on.items() if any(a.id == k for a in adapters.ADAPTERS)}
             if merged != self.adapters_on:
@@ -312,6 +390,8 @@ class Hub:
         self.emit("settings", value=self.settings())
         if tell:
             self.inject(f"[settings] The team changed {' and '.join(tell)}. This replaces what you were told before:\n\n{self.directives()}")
+        if start_looking:
+            self.look_ahead()  # switching it on asks for the first look straight away
         self._run_auto()
         return self.settings()
 
@@ -335,7 +415,7 @@ class Hub:
         approval.note = reason.strip()
         approval.decided = time.time()
         self._put(approval)
-        self._log(self.issues[approval.issue_id], "withdrawn", f"{approval.headline}. {reason.strip()}", approval.id)
+        self._note(approval, "withdrawn", f"{approval.headline}. {reason.strip()}")
         return approval
 
     def attach_reply(self, thread_id: str) -> list[Issue]:
@@ -348,7 +428,7 @@ class Hub:
 
     async def decide(self, approval_id: str, approved: bool, note: str = "", auto: bool = False) -> Approval:
         approval = self.approvals[approval_id]
-        issue = self.issues[approval.issue_id]
+        issue = self.issues.get(approval.issue_id)
         if approval.status != "pending":
             raise ValueError(f"{approval_id} was already {approval.status}.")
         approval.status = "approved" if approved else "rejected"  # set before any await, so a second click cannot act twice
@@ -357,11 +437,12 @@ class Hub:
         approval.decided = time.time()
         by = "automatically, under auto mode, without a person reading it" if auto else "by the reviewer"
         note_text = f' Reviewer\'s note: "{approval.note}"' if approval.note else ""
-        label = f"{approval.id} on issue {issue.id} ({approval.tool}: {approval.headline})"
+        where = f"on issue {issue.id}" if issue else f"against scenario {approval.scenario_id}"
+        label = f"{approval.id} {where} ({approval.tool}: {approval.headline})"
         said = f" Note: {approval.note}" if approval.note else ""
         if not approved:
             self._put(approval)
-            self._log(issue, "rejected", f"{approval.headline}.{said}", approval.id)
+            self._note(approval, "rejected", f"{approval.headline}.{said}")
             self.inject(f"[approval] {label} was REJECTED. It will not happen.{note_text} Update the issue's next step.")
             return approval
         execute = self.executors.get(approval.tool)
@@ -375,8 +456,8 @@ class Hub:
                 approval.result = f"Entered in the corrections ledger and posted to {system}."
                 told = f"was APPROVED {by}, entered in the corrections ledger and posted to {system} through its adapter.{note_text} Treat the corrected values as the truth from now on, although the exports you read may still show the old ones."
                 self._put(approval)
-                self._log(issue, kind, f"{approval.headline}.{said}", approval.id)
-                for correction in self.store.corrections(issue.id):
+                self._note(approval, kind, f"{approval.headline}.{said}")
+                for correction in self.store.corrections(approval.issue_id):
                     if correction["approval_id"] == approval.id and not correction["applied_at"]:
                         await self.reconcile(correction["id"], auto=True)
                 self.inject(f"[approval] {label} {told} Update the issue's next step.")
@@ -394,7 +475,7 @@ class Hub:
                 approval.outcome = "done"
                 told = f"was APPROVED {by} and carried out. {approval.result}{note_text}"
                 kind = "auto_sent" if auto else "sent"
-                if approval.thread_id and approval.thread_id not in issue.thread_ids:
+                if issue and approval.thread_id and approval.thread_id not in issue.thread_ids:
                     issue.thread_ids.append(approval.thread_id)
             except Exception as err:
                 approval.outcome = "failed"
@@ -402,6 +483,6 @@ class Hub:
                 told = f"was APPROVED {by} but FAILED: {approval.result}.{note_text} Nothing went out. Fix the cause and propose it again if it is still needed."
                 kind = "failed"
         self._put(approval)
-        self._log(issue, kind, f"{approval.headline}.{said}" + (f" {approval.result}" if kind == "failed" else ""), approval.id)
+        self._note(approval, kind, f"{approval.headline}.{said}" + (f" {approval.result}" if kind == "failed" else ""))
         self.inject(f"[approval] {label} {told} Update the issue's next step.")
         return approval

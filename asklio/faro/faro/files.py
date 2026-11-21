@@ -33,6 +33,11 @@ def resolve(root: Path, rel: str) -> Path:
     path = (root / rel.lstrip("/")).resolve()
     if path != root and root not in path.parents:
         raise FileError(f"'{rel}' is outside the document folder.")
+    if not path.exists():
+        # A path recorded while the folder sat one level deeper ("<folder name>/soony/...") still means the same file.
+        first, _, rest = rel.lstrip("/").partition("/")
+        if first == root.name and rest and (root / rest).exists():
+            return (root / rest).resolve()
     return path
 
 

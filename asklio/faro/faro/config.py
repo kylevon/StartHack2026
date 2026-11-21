@@ -22,6 +22,7 @@ WEB_DIR = APP_DIR / "web"
 # Team mailbox (AgentMail). With both set, approved emails are really sent and incoming mail reaches the agent.
 MAIL_INBOX = os.environ.get("AGENTMAIL_INBOX", "")
 MAIL_API_KEY = os.environ.get("AGENTMAIL_API_KEY", "")
+LOOKAHEAD_MINUTES = float(os.environ.get("FARO_LOOKAHEAD_MINUTES", "30"))  # how often the agent re-simulates and updates the outlook; 0 turns the timer off
 MAIL_ENABLED = bool(MAIL_INBOX and MAIL_API_KEY) and os.environ.get("FARO_MAIL", "on") != "off"
 MAIL_MODEL = os.environ.get("FARO_MAIL_MODEL", "anthropic:claude-sonnet-5-5")  # writes the emails; the main model only briefs it
 MAIL_POLL_SECONDS = float(os.environ.get("FARO_MAIL_POLL_SECONDS", "20"))

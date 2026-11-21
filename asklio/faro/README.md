@@ -12,7 +12,10 @@ echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ../../.env.local   # untracked; do not pu
 uv run faro                                           # http://127.0.0.1:8000
 ```
 
-No key yet? `FARO_MODEL=scripted uv run faro` runs a fixed script that reads one file and raises one sample approval, so the UI can be tried. It does not reason.
+No key or no credit? Two ways to run without the API:
+
+- `FARO_MODEL=scripted uv run faro` runs a fixed script that reads one file and raises one sample approval, so the UI can be tried. It does not reason. Use it with a separate `FARO_STATE_DIR` and an empty `FARO_DATABASE_URL`, so it does not write into the real record.
+- `FARO_MODEL=off uv run faro` serves the real record with no agent and no watchers. Everything can be read and decided; mail and files that arrive meanwhile are picked up at the next start with a model.
 
 Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon data, unzipped at `asklio/data/soony-data/`.
 
@@ -30,6 +33,7 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 | `FARO_MAIL` | `on` | `off` keeps email approvals record-only |
 | `FARO_MAIL_POLL_SECONDS` | `20` | How often the mailbox is checked |
 | `FARO_DATABASE_URL` | empty | Postgres URL (e.g. Supabase's session pooler) for the system of record. Empty: a local SQLite file |
+| `FARO_LOOKAHEAD_MINUTES` | `30` | How often the agent re-simulates and updates the outlook. Each look costs model tokens; `0` turns the timer off |
 | `FARO_PORT` | `8000` | |
 
 ## How it works
@@ -55,6 +59,14 @@ It holds:
 - **Derived text.** Translations, summaries and emphasis, so each is paid for once.
 
 Kept outside on purpose: the emails (the mailbox is their source of truth; only links and derived text are stored), the documents (the data folder), secrets, and the agent's working memory.
+
+## Outlook
+
+Issues describe what is wrong now. Scenarios are what could still go wrong, whether or not an issue covers it (`hub.py`, `simulate.py`). They appear in the left column as their own group, "Could go wrong", below the issues that need someone.
+
+- **Look-ahead.** Off by default; the team switches it on under Settings, Automation, Forecasting. While it is on, straight away and then every `FARO_LOOKAHEAD_MINUTES` (default 30), the agent takes stock of the whole current state: stock against what is still to be made, deliveries on the way, replies it is waiting for, deadlines.
+- **Simulation.** `simulate_run` is a calculator, not a guess: given units needed, the line's rate, the hours left, and for each part the stock and expected arrivals, it works out how many units get made and which part stops the line when. The agent runs it for the plan as it stands and for each likely failure.
+- **Scenarios.** Each has a likelihood (the agent's estimate), a reason, a cost, a preventive measure, the sign that it is happening anyway and a fallback. The agent acts on the preventive measure at once: where the person who can stop it has an email address, it proposes a reminder or a request to confirm, attached to the scenario; where they have none, the measure tells the team whom to call. The team can drop a scenario that is no longer a risk. If it happens anyway, the agent settles it and proposes its fallback.
 
 ## Source of truth adapters
 
