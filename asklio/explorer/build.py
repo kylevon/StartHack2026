@@ -15,6 +15,7 @@ up by re-running the build.
 from __future__ import annotations
 
 import csv
+import hashlib
 import datetime as dt
 import json
 import re
@@ -42,7 +43,7 @@ def ensure_data() -> None:
     if DATA.exists():
         return
     if not ZIP.exists():
-        sys.exit(f"Missing {DATA} and {ZIP}")
+        sys.exit(f"Missing {DATA}. Run: python3 scripts/update_data.py --apply (from the repo root)")
     with zipfile.ZipFile(ZIP) as z:
         z.extractall(DATA.parent)
 
@@ -171,6 +172,24 @@ def parse_oc(text: str) -> dict:
     return oc
 
 
+# ------------------------------------------------------------- vision cache
+EXTRACTED = ROOT / "data" / "extracted"
+
+
+def extracted_for(path: Path):
+    """Result of read_scans.py for this exact file content, if it has been read."""
+    f = EXTRACTED / (hashlib.sha256(path.read_bytes()).hexdigest() + ".json")
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+
+
+def parse_qty(text) -> int | None:
+    """'14.000', '68 000', '5,000' -> 14000, 68000, 5000. None if it is not a clean quantity."""
+    t = re.sub(r"[\s\u00a0\u202f]", "", str(text or ""))
+    if re.fullmatch(r"\d{1,3}([.,]\d{3})+", t):
+        return int(re.sub(r"[.,]", "", t))
+    return int(t) if re.fullmatch(r"\d+", t) else None
+
+
 # ---------------------------------------------------------------------- build
 def main() -> None:
     ensure_data()
@@ -271,6 +290,17 @@ def main() -> None:
         if doc["ext"] == "pdf":
             doc["text"] = pdf_text(f)
             doc["scanned"] = not doc["text"]
+        if doc["ext"] in ("jpg", "jpeg", "png") or doc.get("scanned"):
+            ex = extracted_for(f)
+            if ex:
+                doc["read"] = {"model": ex.get("model"), "read_at": ex.get("read_at"), **ex["data"]}
+                if ex["kind"] == "document":
+                    doc["text"] = ex["data"].get("full_text", "")
+                    doc["read"].pop("full_text", None)
+                else:
+                    for ln in doc["read"].get("lines", []):
+                        ln["printed_quantity"] = parse_qty(ln.get("printed_quantity_text"))
+                        ln["final_quantity"] = parse_qty(ln.get("final_quantity_text"))
         if doc["ext"] == "xlsx":
             try:
                 doc["sheets"] = {k: v for k, v in read_xlsx(f).items()}
@@ -342,17 +372,118 @@ def main() -> None:
                  f"{gr['supplier_id']}), but the batch sits in ERP stock{' as ' + format(q, ',') + ' pcs' if in_stock else ''}.",
                  [ins["path"]] + ([gr["scan"]] if gr.get("scan") else []), gr["material_id"], q)
 
+    # ---- paper vs ERP: what the scanned delivery note says vs what receiving booked
+    def resolve_material(ln):
+        """Scan lines may carry the supplier's own part number: fall back to the description."""
+        if ln.get("material_id") in components:
+            return ln["material_id"]
+        d = (ln.get("description") or "").strip().lower()
+        for n in (len(d), 24, 18):   # scans truncate long descriptions: try the longest prefix first
+            hits = [cid for cid, c in components.items() if d and c["description"].lower().startswith(d[:n])]
+            if len(hits) == 1:
+                return hits[0]
+        return ln.get("material_id")
+
+    paper_checks = []
+    paper_confirmed = set()   # GR numbers whose booked quantity equals the paper
+    paper_mismatch = set()
+    grs_by_note = defaultdict(list)
+    for r in grs:
+        grs_by_note[r["delivery_note"]].append(r)
+    own_numbers = defaultdict(set)
+    scans_read = [d for d in docs if d["kind"] == "delivery_note_scan" and d.get("read")]
+    for d in scans_read:
+        booked = list(grs_by_note.get(d["ref"], []))
+        lines = d["read"].get("lines", [])
+        for ln in lines:
+            ln["soony_material_id"] = resolve_material(ln)
+            if ln["soony_material_id"] != ln.get("material_id") and ln["soony_material_id"] in components:
+                own_numbers[d["path"].split("/")[-1].split("_")[1][:2], d["read"].get("supplier_name")].add(ln.get("material_id"))
+        if not booked:
+            paper_checks.append({"path": d["path"], "ref": d["ref"], "result": "no_booking",
+                                 "detail": "Delivery note scanned, but no goods receipt references it."})
+            flag("warning", "Receiving", f"Delivery note {d['ref']} has no goods receipt",
+                 "The scan exists, but nothing in the ERP references this note.", [d["path"]])
+            continue
+        # pair identical lines first, then whatever is left over per material
+        left_l, left_b = list(lines), list(booked)
+        for ln in list(left_l):
+            m = next((b for b in left_b if b["material_id"] == ln["soony_material_id"] and b["qty_received"] == ln["final_quantity"]), None)
+            if m:
+                left_l.remove(ln); left_b.remove(m)
+                paper_confirmed.add(m["gr_number"])
+                paper_checks.append({"path": d["path"], "ref": d["ref"], "gr_number": m["gr_number"], "material_id": m["material_id"],
+                                     "paper": ln["final_quantity"], "booked": m["qty_received"], "result": "match",
+                                     "hand_corrected": bool(ln.get("handwritten_correction") and ln.get("corrected_field") == "quantity")})
+        for ln in list(left_l):
+            m = next((b for b in left_b if b["material_id"] == ln["soony_material_id"]), None)
+            if not m:
+                paper_checks.append({"path": d["path"], "ref": d["ref"], "material_id": ln["soony_material_id"],
+                                     "paper": ln["final_quantity"], "result": "not_booked",
+                                     "detail": "On the paper, not in the ERP."})
+                flag("warning", "Receiving", f"On delivery note {d['ref']} but not booked: {cname(ln['soony_material_id'])}",
+                     f"The paper lists {ln.get('final_quantity_text')} × {ln['soony_material_id']}; no goods receipt line matches.", [d["path"]],
+                     ln["soony_material_id"])
+                continue
+            left_l.remove(ln); left_b.remove(m)
+            paper, bk = ln["final_quantity"], m["qty_received"]
+            corrected = ln.get("handwritten_correction") and ln.get("corrected_field") == "quantity"
+            if paper is None:
+                paper_checks.append({"path": d["path"], "ref": d["ref"], "gr_number": m["gr_number"], "material_id": m["material_id"],
+                                     "paper": None, "booked": bk, "result": "unreadable",
+                                     "detail": f"Quantity text '{ln.get('final_quantity_text')}' could not be parsed."})
+                continue
+            paper_mismatch.add(m["gr_number"])
+            in_stock = next((x for x in stock if x["batch"] == m["gr_number"]), None)
+            if in_stock and bk > paper:
+                inflated_batches[m["gr_number"]] = min(in_stock["quantity"], bk - paper)
+            paper_checks.append({"path": d["path"], "ref": d["ref"], "gr_number": m["gr_number"], "material_id": m["material_id"],
+                                 "paper": paper, "printed": ln.get("printed_quantity"), "booked": bk, "ordered": m["qty_ordered"],
+                                 "result": "mismatch", "hand_corrected": bool(corrected)})
+            how = (f"The printed {ln.get('printed_quantity_text')} is struck through and {ln.get('final_quantity_text')} is written by hand. "
+                   if corrected else "")
+            flag("critical", "Receiving", f"Paper says {paper:,}, ERP booked {bk:,}: {cname(m['material_id'])}",
+                 f"Delivery note {d['ref']} (read from the scan). {how}Receiving booked {bk:,} as GR {m['gr_number']} on {m['gr_date']} "
+                 f"({m['remark'] or 'no remark'}); the PO line is for {m['qty_ordered']:,}. "
+                 f"{abs(bk - paper):,} pcs in the system {'do not exist' if bk > paper else 'are missing from the books'}.",
+                 [d["path"]], m["material_id"], abs(bk - paper))
+        for b in left_b:
+            paper_checks.append({"path": d["path"], "ref": d["ref"], "gr_number": b["gr_number"], "material_id": b["material_id"],
+                                 "booked": b["qty_received"], "result": "not_on_paper", "detail": "Booked, but not on the paper."})
+            flag("warning", "Receiving", f"Booked but not on delivery note {d['ref']}: {cname(b['material_id'])}",
+                 f"GR {b['gr_number']} books {b['qty_received']:,} × {b['material_id']}, which the scanned note does not list.", [d["path"]],
+                 b["material_id"], b["qty_received"])
+        # corrections that are not about quantity, and pen notes: worth a human look, the model can misread stamps
+        for ln in lines:
+            if ln.get("handwritten_correction") and ln.get("corrected_field") != "quantity":
+                stamp = any("stamp" in a.lower() for a in d["read"].get("anomalies", []))
+                paper_checks.append({"path": d["path"], "ref": d["ref"], "material_id": ln["soony_material_id"], "result": "to_verify",
+                                     "detail": f"Possible handwritten change to {ln.get('corrected_field') or 'a field'}: {ln.get('correction_note')}"
+                                               + (" A stamp overlaps this area, so this may be a misread." if stamp else "")})
+    for (_, sup_name), nums in own_numbers.items():
+        flag("info", "Master data", f"{sup_name} uses its own part numbers on delivery notes",
+             f"{', '.join(sorted(nums))}: matched to Soony parts by description.", [])
+    if scans_read:
+        n_match = sum(1 for c in paper_checks if c["result"] == "match")
+        flag("info", "Receiving", f"{len(scans_read)} delivery-note scans read: {n_match} booked lines confirmed by the paper",
+             f"{sum(1 for c in paper_checks if c['result'] == 'mismatch')} quantity mismatch(es), "
+             f"{sum(1 for c in paper_checks if c['result'] == 'to_verify')} reading(s) to verify by eye. "
+             f"{sum(1 for r in grs if not r.get('scan'))} of {len(grs)} goods receipts have no scan to check against.", [])
+
     for r in grs:
         o, rcv = r["qty_ordered"], r["qty_received"]
+        r["paper"] = "match" if r["gr_number"] in paper_confirmed else "mismatch" if r["gr_number"] in paper_mismatch else None
         if not r["po_number"]:
             no_po[(r["supplier_id"], r["material_id"])].append(r)
+        elif r["gr_number"] in paper_confirmed or r["gr_number"] in paper_mismatch:
+            pass  # the scan has been read: the paper comparison above is the better evidence
         elif o and rcv and rcv >= 1.5 * o:
             in_stock = next((s for s in stock if s["batch"] == r["gr_number"]), None)
             if in_stock:
                 inflated_batches[r["gr_number"]] = min(in_stock["quantity"], rcv - o)
             flag("critical", "Receiving", f"Booked {rcv / o:.0f}× the ordered quantity: {cname(r['material_id'])}",
                  f"GR {r['gr_number']} on {r['gr_date']}: ordered {o:,}, booked {rcv:,} ({r['remark'] or 'no remark'}). "
-                 f"Check the delivery note {r['delivery_note']}.",
+                 f"The delivery note {r['delivery_note']} has not been read yet: check it.",
                  [r["scan"]] if r.get("scan") else [], r["material_id"], rcv - o)
 
     for (sup, mat), rs in no_po.items():
@@ -545,7 +676,7 @@ def main() -> None:
         "launch_plan": launch_plan, "products": products, "components": components, "bom": bom,
         "suppliers": suppliers, "purchase_orders": pos, "goods_receipts": grs, "stock": stock,
         "packout": packout, "shipments": shipments, "tracker": tracker, "tracker_diff": tracker_diff,
-        "order_confirmations": ocs, "oc_issues": oc_issues, "inspections": inspections,
+        "order_confirmations": ocs, "oc_issues": oc_issues, "inspections": inspections, "paper_checks": paper_checks,
         "master": {k: v for k, v in master.items() if k not in ("components", "bom", "products")},
         "documents": docs,
         "context_md": {rel(p): p.read_text(encoding="utf-8") for p in S.rglob("*.md")},
