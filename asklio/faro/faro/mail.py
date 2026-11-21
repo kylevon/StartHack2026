@@ -200,6 +200,23 @@ async def thread_view(hub: Hub, mailbox: Mailbox, thread_id: str) -> dict:
     return {"thread_id": thread_id, "subject": data.get("subject") or "", "messages": list(await asyncio.gather(*(one(m) for m in data.get("messages", []))))}
 
 
+async def issue_history(hub: Hub, issue) -> dict:
+    """One timeline for an issue: what Faro recorded, merged with the emails of its conversations as the mailbox has them now."""
+    entries = [dict(entry) for entry in issue.history]
+    problem = ""
+    if hub.mailbox is not None:
+        for thread_id in issue.thread_ids:
+            try:
+                view = await thread_view(hub, hub.mailbox, thread_id)
+            except Exception as err:
+                problem = f"The mailbox could not be read: {err or type(err).__name__}"
+                continue
+            for m in view["messages"]:
+                # the message's own "ts" is an ISO string; the timeline sorts on seconds, so ours must win
+                entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"]})
+    return {"entries": sorted(entries, key=lambda e: e["ts"]), "problem": problem}
+
+
 def thread_summary(mailbox: Mailbox, t: dict) -> dict:
     others = [p for p in (t.get("senders") or []) + (t.get("recipients") or []) if mailbox.inbox.lower() not in p.lower()]
     return {

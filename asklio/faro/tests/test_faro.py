@@ -397,3 +397,31 @@ async def test_an_issue_carries_its_whole_story(folder, tmp_path):
     assert issue.thread_ids == ["t7"] and issue.evidence == ["erp.csv", "context/notes.md"]
     await tools["update_issue"].ainvoke({"issue_id": "I-1", "note": "Books arrived.", "next_step": "none", "status": "resolved"})
     assert issue.status == "resolved" and issue.next_step == "" and issue.history[-1]["kind"] == "resolved"
+
+
+async def test_history_merges_faro_entries_and_mail_in_time_order(folder, tmp_path):
+    import httpx
+
+    from faro import mail
+
+    messages = [
+        {"message_id": "<out>", "thread_id": "t1", "labels": ["sent"], "from": "Team <team@agentmail.to>", "to": ["a@supplier.example"], "timestamp": "2026-11-21T16:35:11.099Z", "text": "How many?"},
+        {"message_id": "<in>", "thread_id": "t1", "labels": ["received"], "from": "A <a@supplier.example>", "to": ["team@agentmail.to"], "timestamp": "2026-11-21T16:39:03.000Z", "text": "8000."},
+    ]
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"thread_id": "t1", "subject": "Quantity", "messages": messages})))
+    hub = Hub(folder, tmp_path / "state")
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "k", client)
+    issue = hub.open_issue("Art books short", "blocker", "s", [])
+    issue.history[0]["ts"] = mail.epoch("2026-11-21T16:00:00Z")
+    hub.update_issue("I-1", "Linked the conversation.", thread_id="t1")
+    issue.history[1]["ts"] = mail.epoch("2026-11-21T16:37:00Z")
+
+    result = await mail.issue_history(hub, issue)
+    assert [e["kind"] for e in result["entries"]] == ["found", "mail_sent", "note", "mail_received"] and result["problem"] == ""
+    assert all(isinstance(e["ts"], float) for e in result["entries"])
+    json.dumps(result)  # what the endpoint returns must serialise
+
+    broken = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(500, text="down")))
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "k", broken)
+    degraded = await mail.issue_history(hub, issue)
+    assert [e["kind"] for e in degraded["entries"]] == ["found", "note"] and "could not be read" in degraded["problem"]

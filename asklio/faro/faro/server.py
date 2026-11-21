@@ -106,19 +106,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
         hub: Hub = app.state.hub
         if issue_id not in hub.issues:
             raise HTTPException(404, f"No issue {issue_id}.")
-        issue = hub.issues[issue_id]
-        entries = [dict(entry) for entry in issue.history]
-        problem = ""
-        if hub.mailbox is not None:
-            for thread_id in issue.thread_ids:
-                try:
-                    view = await mail.thread_view(hub, hub.mailbox, thread_id)
-                except Exception as err:
-                    problem = f"The mailbox could not be read: {err or type(err).__name__}"
-                    continue
-                for m in view["messages"]:
-                    entries.append({"ts": mail.epoch(m["ts"]), "kind": "mail_" + m["direction"], "text": m["text"], "subject": view["subject"], **m})
-        return {"entries": sorted(entries, key=lambda e: e["ts"]), "problem": problem}
+        return await mail.issue_history(hub, hub.issues[issue_id])
 
     @app.get("/api/mail/threads")
     async def mail_threads():
