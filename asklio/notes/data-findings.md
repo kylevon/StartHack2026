@@ -1,6 +1,8 @@
 # Data findings: first review (Sat 21 Nov)
 
-Source: `data/soony-data.zip` (portal snapshot of 2026-11-20). Unzip into `data/soony-data/` (gitignored).
+Source: portal snapshot of 2026-11-20. The data is not in git; `scripts/update_data.py --apply` checks out the current snapshot into `data/soony-data/`.
+
+> Newer snapshots are reviewed in `data/CHANGELOG.md`. The 21 Nov drop changes findings 1 (art books) and 3 (game cards) and adds a sleeve revision problem.
 
 **Headline:** the launch plan marks every part "ok" except the lid magnets. In reality the magnets are fine, and **art books and statues are short**, which caps the Collector's Edition at about **19,300 of the 25,200** still to pack.
 
