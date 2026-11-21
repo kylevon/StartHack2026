@@ -1,6 +1,6 @@
-# Local secrets and Dockside runtime state
+# Local secrets and Faro runtime state
 .env.local
 .venv/
 __pycache__/
 .pytest_cache/
-/asklio/dockside/.dockside/
+/asklio/faro/.faro/

@@ -1,6 +1,6 @@
 """A stand-in model that follows a fixed script, for tests and for trying the UI with no API key.
 
-Run with DOCKSIDE_MODEL=scripted. It reads one file and raises one sample approval;
+Run with FARO_MODEL=scripted. It reads one file and raises one sample approval;
 it does not reason about anything.
 """
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -41,7 +41,7 @@ class ScriptedModel(BaseChatModel):
                         "headline": "Scripted sample: confirm one delivery quantity",
                         "reason": "Scripted mode produces this sample approval so the queue can be tried without a model. It is not a finding.",
                         "evidence": [path], "severity": "info",
-                        "to": "Sample Supplier <sample@example.com>", "subject": "Sample: please confirm quantity",
+                        "to": ["sample@example.com"], "to_name": "Sample Supplier", "subject": "Sample: please confirm quantity",
                         "body": "Hello,\n\nplease confirm the quantity shipped.\n\nThe team", "language": "English",
                     }, n)],
                 )

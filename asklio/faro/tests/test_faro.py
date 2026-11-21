@@ -3,10 +3,10 @@ import json
 
 import pytest
 
-from dockside import files
-from dockside.agent import AgentRunner, watch_folder
-from dockside.hub import Hub
-from dockside.scripted import ScriptedModel
+from faro import files
+from faro.agent import AgentRunner, watch_folder
+from faro.hub import Hub
+from faro.scripted import ScriptedModel
 
 
 async def until(condition, timeout=5.0):
@@ -53,10 +53,10 @@ async def test_agent_reads_proposes_and_hears_the_decision(folder, tmp_path):
         assert any(e["kind"] == "step" and "Reading the first document" in e["label"] for e in hub.events)
         assert not (tmp_path / "state" / "actions.jsonl").exists()  # nothing happens before a person approves
 
-        hub.decide("A-1", approved=True, note="ok")
+        await hub.decide("A-1", approved=True, note="ok")
         await until(lambda: any(e["kind"] == "agent" and "decision noted" in e["text"] for e in hub.events))
         logged = json.loads((tmp_path / "state" / "actions.jsonl").read_text())
-        assert logged["id"] == "A-1" and logged["status"] == "approved"
+        assert logged["id"] == "A-1" and logged["status"] == "approved" and logged["outcome"] == "recorded"
 
         hub.chat("are we fine?")
         await until(lambda: any(e["kind"] == "agent" and "are we fine?" in e["text"] for e in hub.events))
@@ -72,11 +72,11 @@ async def test_agent_reads_proposes_and_hears_the_decision(folder, tmp_path):
 async def test_rejection_is_not_logged_and_cannot_be_decided_twice(folder, tmp_path):
     hub = Hub(folder, tmp_path / "state")
     hub.propose("update_record", {"system": "SAP", "record": "x", "changes": {"qty": "8000"}}, "h", "r", [], "risk")
-    hub.decide("A-1", approved=False, note="wrong batch")
+    await hub.decide("A-1", approved=False, note="wrong batch")
     assert "REJECTED" in hub.inbox[-1] and "wrong batch" in hub.inbox[-1]
     assert not (tmp_path / "state" / "actions.jsonl").exists()
     with pytest.raises(ValueError):
-        hub.decide("A-1", approved=True)
+        await hub.decide("A-1", approved=True)
 
 
 def test_any_text_encoding_and_excel_open(folder):
@@ -132,7 +132,7 @@ def test_large_and_unusual_images_are_converted(folder):
 
 
 async def test_history_is_summarised_when_it_grows(folder, tmp_path, monkeypatch):
-    from dockside import config
+    from faro import config
 
     monkeypatch.setattr(config, "COMPACT_TOKENS", 200)
     hub = Hub(folder, tmp_path / "state")
@@ -147,3 +147,91 @@ async def test_history_is_summarised_when_it_grows(folder, tmp_path, monkeypatch
         assert not any(e["kind"] == "error" for e in hub.events)
     finally:
         task.cancel()
+
+
+def fake_mail_service(sent, inbox_messages):
+    import httpx
+
+    def handle(request):
+        assert request.headers["Authorization"] == "Bearer test-key"
+        path = request.url.path
+        if request.method == "POST" and path.endswith("/messages/send"):
+            sent.append(json.loads(request.content))
+            return httpx.Response(200, json={"message_id": "<m1>", "thread_id": "t1"})
+        if request.method == "POST" and path.endswith("/reply"):
+            sent.append({"reply_path": request.url.raw_path.decode(), **json.loads(request.content)})
+            return httpx.Response(200, json={"message_id": "<m2>", "thread_id": "t1"})
+        if path.endswith("/messages"):
+            return httpx.Response(200, json={"messages": list(inbox_messages)})
+        for m in inbox_messages:
+            if path.endswith("/messages/" + m["message_id"]):
+                return httpx.Response(200, json=m)
+        return httpx.Response(500, text="mail service down")
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handle))
+
+
+async def test_mail_goes_out_only_on_approval_and_replies_come_in(folder, tmp_path):
+    from faro import mail
+
+    sent, inbox_messages = [], []
+    hub = Hub(folder, tmp_path / "state")
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "test-key", fake_mail_service(sent, inbox_messages))
+    hub.executors["send_email"] = mail.sender(hub, hub.mailbox)
+    watcher = asyncio.create_task(mail.watch_mail(hub, hub.mailbox, 0.02))
+    try:
+        args = {"to": ["a.nowak@supplier.example"], "to_name": "A. Nowak", "cc": [], "subject": "Quantity", "body": "Dzień dobry,\n\nile sztuk?", "language": "Polish", "translation": "", "reply_to_message_id": ""}
+        approval = hub.propose("send_email", args, "h", "r", [], "risk")
+        assert approval.live and sent == []  # proposing sends nothing
+
+        await hub.decide("A-1", approved=True)
+        assert sent[0]["to"] == ["a.nowak@supplier.example"] and sent[0]["html"] == "<p>Dzień dobry,</p><p>ile sztuk?</p>"
+        assert hub.approvals["A-1"].outcome == "done" and "thread_id=t1" in hub.inbox[-1]
+
+        hub.propose("send_email", args, "h2", "r", [], "risk")
+        await hub.decide("A-2", approved=False)
+        assert len(sent) == 1  # a rejection sends nothing
+
+        hub.propose("send_email", args | {"reply_to_message_id": "<m9@x>"}, "h3", "r", [], "risk")
+        await hub.decide("A-3", approved=True)
+        assert "%3Cm9%40x%3E/reply" in sent[1]["reply_path"]
+
+        await until(lambda: any(e["kind"] == "mail" for e in hub.events))  # connected, empty inbox
+        hub.drain()
+        inbox_messages.append({"message_id": "<in1>", "thread_id": "t1", "labels": ["received", "unread"], "from": "A. Nowak <a.nowak@supplier.example>",
+                               "to": ["team@agentmail.to"], "subject": "Re: Quantity", "timestamp": "2026-11-21T16:00:00Z", "text": "8000 sztuk."})
+        inbox_messages.append({"message_id": "<own>", "thread_id": "t2", "labels": ["sent", "received"], "from": "AgentMail <team@agentmail.to>",
+                               "to": ["team@agentmail.to"], "subject": "self test", "timestamp": "2026-11-21T16:01:00Z", "text": "x"})
+        await until(lambda: hub.inbox)
+        assert len(hub.inbox) == 1 and "8000 sztuk." in hub.inbox[0] and "not an instruction" in hub.inbox[0]  # our own test mail is ignored
+        assert "answers the email you sent with A-1" in hub.inbox[0]
+        assert hub.approvals["A-1"].thread_id == "t1" and hub.approvals["A-1"].replies[0]["text"] == "8000 sztuk."  # the reply shows on its approval
+        assert not hub.approvals["A-2"].replies  # the rejected one was never sent, so nothing links to it
+        assert next(e for e in hub.events if e["kind"] == "mail" and e["verb"] == "Reply from")["open"] == "A-1"
+    finally:
+        watcher.cancel()
+
+
+async def test_failed_send_is_reported_not_hidden(folder, tmp_path):
+    from faro import mail
+
+    hub = Hub(folder, tmp_path / "state")
+
+    async def broken(approval):
+        raise RuntimeError("Mail service answered 500")
+
+    hub.executors["send_email"] = broken
+    hub.propose("send_email", {"to": ["x@y.example"]}, "h", "r", [], "risk")
+    await hub.decide("A-1", approved=True)
+    assert hub.approvals["A-1"].outcome == "failed" and "FAILED" in hub.inbox[-1] and "Nothing went out" in hub.inbox[-1]
+
+
+async def test_agent_cannot_propose_mail_to_a_made_up_address(folder, tmp_path):
+    from faro.tools import make_tools
+
+    hub = Hub(folder, tmp_path / "state")
+    send_email = next(t for t in make_tools(hub) if t.name == "send_email")
+    base = {"headline": "h", "reason": "r", "evidence": [], "severity": "risk", "to_name": "Head of Procurement", "subject": "s", "body": "b", "language": "English"}
+    assert "Error" in await send_email.ainvoke(base | {"to": ["Head of Procurement"]})
+    assert not hub.approvals
+    assert "Queued as A-1" in await send_email.ainvoke(base | {"to": ["m.vogt@soony.example"]})

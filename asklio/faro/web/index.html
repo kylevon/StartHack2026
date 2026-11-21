@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="only light">
-<title>Dockside</title>
+<title>Faro</title>
 <style>
 /* Three parts on one soft surface. Only two things are raised: the approval cards on the left and the chat panel on the right. Everything inside them, and the whole centre, is flat. Light only. */
 :root{
@@ -164,19 +164,25 @@ const fileUrl = (path) => '/api/file?path=' + encodeURIComponent(path);
 const isImage = (path) => /\.(jpe?g|png|webp|gif)$/i.test(path);
 
 function kind(a) {
-  if (a.tool === 'send_email') return 'Email to ' + a.args.to;
+  if (a.tool === 'send_email') return 'Email to ' + a.args.to_name;
   if (a.tool === 'edit_file') return 'Edit ' + a.args.path;
   return a.args.system + ': ' + a.args.record;
 }
 const toolTag = { send_email: 'Email', edit_file: 'File edit', update_record: 'Record change' };
 const statusLabel = { pending: 'Needs your approval', approved: 'Approved', rejected: 'Rejected' };
+function cardStatus(a) {
+  if (a.replies && a.replies.length) return ['Reply received', 'pending'];
+  if (a.outcome === 'done') return ['Sent, waiting for a reply', 'approved'];
+  if (a.outcome === 'failed') return ['Sending failed', 'rejected'];
+  return [statusLabel[a.status], a.status];
+}
 
 function renderLeft() {
   const list = [...approvals.values()].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1));
   const waiting = list.filter((a) => a.status === 'pending').length;
-  $('left').innerHTML = '<div class="brand"><b>Dockside</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
+  $('left').innerHTML = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>' +
     (list.length ? list.map((a) => '<button class="ap ' + (a.id === selected ? 'on ' : '') + (a.status === 'pending' ? '' : 'done') + '" data-open="' + a.id + '"' + (a.id === selected ? ' aria-current="true"' : '') + '>' +
-      '<span class="dot dot-' + esc(a.severity) + '"></span><span><b>' + esc(a.headline) + '</b><span class="why">' + esc(kind(a)) + '</span><span class="tag">' + toolTag[a.tool] + '</span><span class="st st-' + a.status + '">' + statusLabel[a.status] + '</span></span></button>').join('')
+      '<span class="dot dot-' + esc(a.severity) + '"></span><span><b>' + esc(a.headline) + '</b><span class="why">' + esc(kind(a)) + '</span><span class="tag">' + toolTag[a.tool] + '</span><span class="st st-' + cardStatus(a)[1] + '">' + cardStatus(a)[0] + '</span></span></button>').join('')
       : '<p class="hint">Approvals appear here when the agent wants to send an email, change a file or post to a system.</p>');
 }
 
@@ -185,7 +191,7 @@ function actionView(a) {
   if (a.tool === 'send_email') {
     const en = lang === 'en' && x.translation;
     const seg = x.translation ? '<div class="seg"><button class="' + (en ? '' : 'on') + '" data-lang="orig">' + esc(x.language) + '</button><button class="' + (en ? 'on' : '') + '" data-lang="en">English</button></div>' : '';
-    return '<div class="letter"><div class="letter-top"><span>To ' + esc(x.to) + '</span>' + seg + '</div><p class="subject">' + esc(x.subject) + '</p><div class="body">' + esc(en ? x.translation : x.body) + '</div></div>';
+    return '<div class="letter"><div class="letter-top"><span>To ' + esc(x.to_name) + ' · ' + esc(x.to.join(', ')) + (x.cc && x.cc.length ? ' · cc ' + esc(x.cc.join(', ')) : '') + (x.reply_to_message_id ? ' · reply in thread' : '') + '</span>' + seg + '</div><p class="subject">' + esc(x.subject) + '</p><div class="body">' + esc(en ? x.translation : x.body) + '</div></div>';
   }
   if (a.tool === 'edit_file') {
     return '<p><a href="' + fileUrl(x.path) + '" target="_blank" rel="noopener">' + esc(x.path) + '</a></p><p class="label">Replace</p><pre class="quote">' + esc(x.find) + '</pre><p class="label">With</p><pre class="quote">' + esc(x.replace) + '</pre>';
@@ -196,7 +202,7 @@ function actionView(a) {
 
 function renderCenter(force) {
   const a = approvals.get(selected);
-  const key = a ? a.id + a.status + lang : 'empty';
+  const key = a ? a.id + a.status + a.outcome + (a.replies || []).length + lang : 'empty';
   if (!force && key === shownKey) return;   // leave the note field alone while it is being typed in
   shownKey = key;
   if (!a) {
@@ -206,15 +212,16 @@ function renderCenter(force) {
   const image = a.evidence.find(isImage);
   const decide = a.status === 'pending'
     ? '<h2>Your approval</h2><input class="note-in" id="note" type="text" placeholder="Optional note to the agent" aria-label="Note to the agent" autocomplete="off">' +
-      '<div class="act"><button class="btn btn-primary" data-decide="1">Approve</button><button class="btn" data-decide="0">Reject</button></div>' +
-      '<p class="cap">Approving records the action. Mail, file and system connections are not wired up yet, so nothing is sent or changed.</p>'
-    : '<h2>Decided</h2><p class="verdict ' + a.status + '">' + statusLabel[a.status] + ' at ' + clock(a.decided) + '</p>' + (a.note ? '<p class="found">Note: ' + esc(a.note) + '</p>' : '');
+      '<div class="act"><button class="btn btn-primary" data-decide="1">' + (a.live ? 'Approve and send' : 'Approve') + '</button><button class="btn" data-decide="0">Reject</button></div>' +
+      '<p class="cap">' + (a.live ? 'Approving sends this email straight away from the team mailbox. It cannot be recalled.' : 'Approving only records this action. This kind of action is not connected to an outside system yet, so nothing is sent or changed.') + '</p>'
+    : '<h2>Decided</h2><p class="verdict ' + (a.outcome === 'failed' ? 'rejected' : a.status) + '">' + (a.outcome === 'failed' ? 'Approved, but it failed' : a.outcome === 'done' ? 'Approved and sent' : a.outcome === 'recorded' ? 'Approved, recorded only' : statusLabel[a.status]) + ' at ' + clock(a.decided) + '</p>' + (a.result ? '<p class="found">' + esc(a.result) + '</p>' : '') + (a.note ? '<p class="found">Note: ' + esc(a.note) + '</p>' : '');
   $('center').innerHTML = '<div class="detail">' +
     '<header><div class="sevline sev-' + esc(a.severity) + '">' + esc(a.severity) + ' · ' + a.id + '</div><h1>' + esc(a.headline) + '</h1></header>' +
     '<section><h2>Why</h2><p class="found">' + esc(a.reason) + '</p></section>' +
     (a.evidence.length ? '<section><h2>Evidence</h2><div class="evidence">' + a.evidence.map((p) => '<a href="' + fileUrl(p) + '" target="_blank" rel="noopener">' + esc(p) + '</a>').join('') +
       (image ? '<img src="' + fileUrl(image) + '" alt="' + esc(image) + '">' : '') + '</div></section>' : '') +
     '<section><h2>' + esc(kind(a)) + '</h2>' + actionView(a) + '</section>' +
+    ((a.replies || []).length ? '<section><h2>' + (a.replies.length === 1 ? 'Reply' : a.replies.length + ' replies') + '</h2>' + a.replies.map((r) => '<div class="letter" style="margin-bottom:12px"><div class="letter-top"><span>From ' + esc(r.from) + ' · ' + esc(r.ts.replace('T', ' ').slice(0, 16)) + '</span></div><p class="subject">' + esc(r.subject) + '</p><div class="body">' + esc(r.text) + '</div></div>').join('') + '</section>' : '') +
     '<section class="decide">' + decide + '</section></div>';
   $('center').scrollTop = 0;
 }
@@ -270,7 +277,7 @@ function apply(e) {
     approvals.set(a.id, a);
     feed.push(a.status === 'pending'
       ? { kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.id }
-      : { kind: 'chip', ts: e.ts, verb: a.status === 'approved' ? 'Approved' : 'Rejected', label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.id, tone: a.status === 'approved' ? 'good' : 'bad' });
+      : { kind: 'chip', ts: e.ts, verb: a.outcome === 'done' ? 'Sent' : a.outcome === 'failed' ? 'Failed' : a.status === 'approved' ? 'Approved' : 'Rejected', label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.id, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
   }
   else if (e.kind === 'status') { $('status').textContent = e.value; $('chat-head').classList.toggle('working', e.value === 'working'); }
   else feed.push(e);

@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import config, files
+from . import config, files, mail
 from .agent import AgentRunner, watch_folder
 from .hub import Hub
 
@@ -23,7 +23,7 @@ class DecisionIn(BaseModel):
     note: str = ""
 
 
-def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None) -> FastAPI:
+def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mailbox=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         hub = Hub(data_dir or config.DATA_DIR, state_dir or config.STATE_DIR)
@@ -31,6 +31,10 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None) -> 
         tasks = [asyncio.create_task(watch_folder(hub, poll_seconds or config.POLL_SECONDS))]
         try:
             chosen = model or config.MODEL
+            if config.MAIL_ENABLED and chosen != "scripted" and mailbox is not False:  # the scripted stand-in must never send real mail
+                hub.mailbox = mailbox or mail.Mailbox(config.MAIL_INBOX, config.MAIL_API_KEY)
+                hub.executors["send_email"] = mail.sender(hub, hub.mailbox)
+                tasks.append(asyncio.create_task(mail.watch_mail(hub, hub.mailbox, config.MAIL_POLL_SECONDS)))
             if isinstance(chosen, str) and chosen.startswith("anthropic:") and not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
                 raise RuntimeError("no ANTHROPIC_API_KEY found")
             if chosen == "scripted":
@@ -83,7 +87,7 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None) -> 
         if approval_id not in hub.approvals:
             raise HTTPException(404, f"No approval {approval_id}.")
         try:
-            hub.decide(approval_id, body.approved, body.note)
+            await hub.decide(approval_id, body.approved, body.note)
         except ValueError as err:
             raise HTTPException(409, str(err)) from None
         return {"ok": True}
@@ -103,8 +107,10 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None) -> 
 
 
 def main() -> None:
-    print(f"Dockside: http://127.0.0.1:{config.PORT}  (model {config.MODEL}, watching {config.DATA_DIR})")
-    uvicorn.run(create_app(), host="127.0.0.1", port=config.PORT, log_level="warning")
+    mailbox = config.MAIL_INBOX if config.MAIL_ENABLED and config.MODEL != "scripted" else "off"
+    print(f"Faro: http://127.0.0.1:{config.PORT}  (model {config.MODEL}, watching {config.DATA_DIR}, mail {mailbox})")
+    # Open event streams never close on their own; without a limit a stopped server lingers with the agent still running.
+    uvicorn.run(create_app(), host="127.0.0.1", port=config.PORT, log_level="warning", timeout_graceful_shutdown=2)
 
 
 if __name__ == "__main__":
