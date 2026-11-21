@@ -21,6 +21,7 @@ WEB_DIR = APP_DIR / "web"
 MAIL_INBOX = os.environ.get("AGENTMAIL_INBOX", "")
 MAIL_API_KEY = os.environ.get("AGENTMAIL_API_KEY", "")
 MAIL_ENABLED = bool(MAIL_INBOX and MAIL_API_KEY) and os.environ.get("FARO_MAIL", "on") != "off"
+MAIL_MODEL = os.environ.get("FARO_MAIL_MODEL", "anthropic:claude-sonnet-5-5")  # writes the emails; the main model only briefs it
 MAIL_POLL_SECONDS = float(os.environ.get("FARO_MAIL_POLL_SECONDS", "20"))
 COMPACT_TOKENS = int(os.environ.get("FARO_COMPACT_TOKENS", "150000"))  # non-Claude models: summarise history past this size
 

@@ -26,6 +26,7 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 | `FARO_BRIEF` | `brief.md` | Optional description of this deployment |
 | `FARO_COMPACT_TOKENS` | `150000` | Non-Claude models: history size at which old turns are summarised |
 | `AGENTMAIL_INBOX`, `AGENTMAIL_API_KEY` | from the repo `.env` | Team mailbox. With both set, approved emails are really sent |
+| `FARO_MAIL_MODEL` | `anthropic:claude-sonnet-5-5` | Model that writes the emails from the agent's brief |
 | `FARO_MAIL` | `on` | `off` keeps email approvals record-only |
 | `FARO_MAIL_POLL_SECONDS` | `20` | How often the mailbox is checked |
 | `FARO_PORT` | `8000` | |
@@ -35,8 +36,9 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 - **Files** (`files.py`): `list_files`, `search_files`, `read_file`, for any mix of types. Text and CSV in any common encoding, Excel (`.xlsx`, `.xlsm`, `.xls`) and PDF text come back as text. PDFs are read page by page, so scanned pages inside a text PDF are handed to the model as images, as are photos and scans (JPEG, PNG, TIFF, BMP, WebP, GIF), downscaled when too large. Long files come in parts rather than being cut. Search covers the text of PDFs and spreadsheets too. Paths cannot leave the folder.
 - **Watching** (`agent.py: watch_folder`): the folder is polled; every new, changed or removed file is announced to the agent. Drop a file in and the agent picks it up.
 - **Injection** (`hub.py`, `agent.py: InjectInbox`): chat messages, file announcements and approval decisions all go into one inbox. A middleware hands the inbox to the agent before every model call, so a message lands in the middle of whatever the agent is doing.
-- **Approvals** (`tools.py`): `send_email`, `edit_file` and `update_record` never act when the agent calls them. Each call queues an approval and returns, so the agent keeps working; the decision is injected later.
-- **Mail** (`mail.py`): with the team's AgentMail inbox configured, approving a `send_email` proposal sends it (or replies inside the thread), and the result goes back to the agent. The inbox is polled; each new incoming message is injected as `[mail]`, marked as outside information and not as instructions. The agent can also `list_mail` and `read_mail`. Recipients must be real addresses from the documents or from received mail; a proposal with a made-up address is refused. Scripted mode never sends.
+- **Issues** (`hub.py`, `tools.py`): the agent opens one issue per problem it finds (title, why it matters, evidence, next step) and keeps it current. Every proposal, email and note attaches to its issue, so the UI shows one card per problem with a Decision page (why, next action, evidence) and a History tab: one timeline of what the agent did, what the reviewer decided and the emails, read from the mailbox.
+- **Approvals** (`tools.py`): `send_email`, `edit_file` and `update_record` never act when the agent calls them. Each call queues an approval on its issue and returns, so the agent keeps working; the decision is injected later.
+- **Mail** (`mail.py`): the team's AgentMail inbox is the record of all outside communication. The agent is given the inbox's sent and received messages at start, checks it before proposing an email, and each proposal shows the reviewer what the inbox already holds with that recipient. The agent does not write emails: it gives a brief, and the mail model (Sonnet by default) drafts the message and an English translation. Approving sends it, or replies inside the thread. New incoming mail is injected as `[mail]`, marked as outside information and not as instructions, and linked to the approval it answers. The conversation shown in the UI is read from the inbox each time, not from Faro's memory. Recipients must be real addresses from the documents or from received mail. Scripted mode never sends.
 - **Context** (`agent.py`): on Claude, server-side compaction replaces older turns, including old file contents, with a summary once the conversation passes about 150K tokens. Other providers get LangChain's `SummarizationMiddleware`, which does the same locally.
 
 ## Not done yet
@@ -44,7 +46,7 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 - **Only email is connected.** An approved `edit_file` or `update_record` is recorded in `.faro/actions.jsonl` and nothing else happens; the agent is told so. Every approved action, sent or not, is logged there.
 - **Replies inside a thread are untested against the live mailbox.** New messages and reading are; the reply call follows AgentMail's documentation.
 - **Files come from the local folder only.** To follow the Lio portal instead, sync its `GET /api/v1/files` into the folder, or replace `files.snapshot` and the reads.
-- **State is in memory.** Restarting the server forgets the conversation and the approvals queue, and the agent starts its review again.
+- **Only the record survives a restart.** Issues, approvals and the chat log are saved in `.faro/state.json`. The agent's working memory is not: after a restart it is told which issues exist and re-reads what it needs.
 - **Claude's compaction is untested here.** It is configured as documented but has not run against the live API yet. The local summarisation path is covered by a test.
 - **Word and PowerPoint files are not opened.**
 

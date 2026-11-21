@@ -230,3 +230,67 @@ def read(root: Path, rel: str, offset: int = 0):
     except Exception as err:  # damaged or password-protected files, mislabelled extensions
         raise FileError(f"'{rel}' could not be opened as a {suffix} file ({type(err).__name__}: {err}).") from None
     return _page(_decode(path.read_bytes(), rel), offset, rel)
+
+
+# ----- previews for people (the UI), as opposed to content for the model -----
+PREVIEW_ROWS, PREVIEW_COLS, PREVIEW_CHARS = 300, 40, 40_000
+
+
+def _table(name: str, rows: list[list]) -> dict:
+    rows = [row for row in rows if any(cell not in (None, "") for cell in row)]
+    shown = [["" if cell is None else str(cell) for cell in row[:PREVIEW_COLS]] for row in rows[:PREVIEW_ROWS]]
+    return {"name": name, "rows": shown, "total_rows": len(rows)}
+
+
+def preview(root: Path, rel: str) -> dict:
+    """What a person needs to look at a file in the browser without downloading it."""
+    import csv
+    import io
+
+    path = resolve(root, rel)
+    if not path.is_file():
+        raise FileError(f"No file at '{rel}'.")
+    suffix = path.suffix.lower()
+    try:
+        if suffix in IMAGE_SUFFIXES:
+            return {"kind": "pages", "pages": 1}
+        if suffix == ".pdf":
+            import pymupdf as fitz
+
+            with fitz.open(path) as doc:
+                return {"kind": "pages", "pages": doc.page_count}
+        if suffix == ".xls":
+            import xlrd
+
+            book = xlrd.open_workbook(path)
+            return {"kind": "tables", "tables": [_table(s.name, [s.row_values(i) for i in range(s.nrows)]) for s in book.sheets()]}
+        if suffix in SHEET_SUFFIXES:
+            from openpyxl import load_workbook
+
+            book = load_workbook(path, read_only=True, data_only=True)
+            return {"kind": "tables", "tables": [_table(s.title, [list(r) for r in s.iter_rows(values_only=True)]) for s in book.worksheets]}
+        text = _decode(path.read_bytes(), rel)
+        if suffix in {".csv", ".tsv"}:
+            try:
+                dialect = csv.Sniffer().sniff(text[:5000], delimiters=",;\t|")
+            except csv.Error:
+                dialect = csv.excel_tab if suffix == ".tsv" else csv.excel
+            return {"kind": "tables", "tables": [_table(path.name, list(csv.reader(io.StringIO(text), dialect)))]}
+        return {"kind": "text", "text": text[:PREVIEW_CHARS], "total_chars": len(text)}
+    except FileError:
+        raise
+    except Exception as err:
+        raise FileError(f"'{rel}' could not be opened ({type(err).__name__}: {err}).") from None
+
+
+def page_image(root: Path, rel: str, number: int) -> bytes:
+    """One page of a PDF, or an image file, as a JPEG for the browser."""
+    import pymupdf as fitz
+
+    path = resolve(root, rel)
+    if not path.is_file():
+        raise FileError(f"No file at '{rel}'.")
+    with fitz.open(path) as doc:
+        if not 0 <= number < doc.page_count:
+            raise FileError(f"'{rel}' has no page {number + 1}.")
+        return base64.b64decode(_render(doc[number])["base64"])

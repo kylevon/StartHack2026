@@ -35,17 +35,18 @@ class ScriptedModel(BaseChatModel):
                 return AIMessage(content, tool_calls=[_call("read_file", {"path": target}, n)])
             if last.name == "read_file":
                 path = next(m for m in reversed(messages) if isinstance(m, AIMessage) and m.tool_calls).tool_calls[0]["args"]["path"]
-                return AIMessage(
-                    "",
-                    tool_calls=[_call("send_email", {
-                        "headline": "Scripted sample: confirm one delivery quantity",
-                        "reason": "Scripted mode produces this sample approval so the queue can be tried without a model. It is not a finding.",
-                        "evidence": [path], "severity": "info",
-                        "to": ["sample@example.com"], "to_name": "Sample Supplier", "subject": "Sample: please confirm quantity",
-                        "body": "Hello,\n\nplease confirm the quantity shipped.\n\nThe team", "language": "English",
-                    }, n)],
-                )
-            return AIMessage("Scripted mode: I read one file and queued one sample approval.")
+                return AIMessage("", tool_calls=[_call("open_issue", {
+                    "title": "Scripted sample: one delivery quantity to confirm", "severity": "info",
+                    "summary": "Scripted mode produces this sample issue so the screen can be tried without a model. It is not a finding.",
+                    "evidence": [path],
+                }, n)])
+            if last.name == "open_issue":
+                return AIMessage("", tool_calls=[_call("send_email", {
+                    "issue_id": "I-1", "headline": "Ask the sample supplier to confirm the quantity", "reason": "A sample action for the sample issue.",
+                    "to": ["sample@example.com"], "to_name": "Sample Supplier", "language": "English",
+                    "brief": "Sample: please confirm quantity\n\nHello,\n\nplease confirm the quantity shipped.\n\nThe team",
+                }, n)])
+            return AIMessage("Scripted mode: I read one file, opened one sample issue and queued one sample approval.")
         text = last.content if isinstance(last, HumanMessage) and isinstance(last.content, str) else ""
         if "[chat]" in text:
             return AIMessage("Scripted mode, no model connected. I received: " + text.split("[chat]", 1)[1].strip()[:200])
