@@ -1,2 +1,9 @@
 data/soony-data/
 explorer/data.json
+data/extracted/
+explorer/actions.json
+data/actions_state.json
+data/outbox/
+__pycache__/
+.env
+data/soony-data.zip
