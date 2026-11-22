@@ -17,7 +17,7 @@ On the Soony case it found that the launch plan marked parts "ok" that were not:
 
 Code, architecture and configuration: [`asklio/faro/README.md`](asklio/faro/README.md).
 
-**Pitch deck:** [view the slides](pitch/README.md). The deck itself is [`pitch.html`](pitch.html); download it and open it in a browser to present.
+**Pitch deck:** [present it live](https://kylevon.github.io/StartHack2026/) (arrow keys or click to advance, `F` fullscreen, `N` notes), or [read the slides with notes](pitch/README.md). The live page is public and is republished whenever [`pitch.html`](pitch.html) changes on master.
 
 ## Run it
 

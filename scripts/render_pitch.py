@@ -93,7 +93,7 @@ def main():
         "Pictures of [`pitch.html`](../pitch.html), one per step, with the speaker notes. "
         "GitHub shows the HTML file as source, so this page is the way to read the deck here.",
         "",
-        "To present it, download `pitch.html` and open it in a browser: "
+        "To present it, open <https://kylevon.github.io/StartHack2026/>: "
         "arrow keys or click to advance, `F` fullscreen, `N` notes, `S` sound.",
         "",
         "This folder is generated. After changing the deck, run `python3 scripts/render_pitch.py`. "
