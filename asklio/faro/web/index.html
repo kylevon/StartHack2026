@@ -483,17 +483,17 @@ function renderAuto() {   // the settings button at the bottom of the left colum
 function settingsPane() {
   if (settingsTab === 'objectives') {
     const list = settings.objectives;
-    return '<div><h3>Objectives</h3><p class="lead">What the agent should achieve, most important first. It follows them in everything it decides and proposes; when two conflict, the higher one wins.</p></div>' +
+    return '<div><h3>Objectives</h3><p class="lead">What Faro should achieve, most important first. When two conflict, the higher one wins.</p></div>' +
       '<div>' + (list.length ? list.map((text, i) => '<div class="obj"><span class="n">' + (i + 1) + '</span><input class="set-in" data-obj="' + i + '" value="' + esc(text) + '" aria-label="Objective ' + (i + 1) + '">' +
         '<span><button class="icon-btn" data-obj-move="' + i + '" data-by="-1" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="icon-btn" data-obj-move="' + i + '" data-by="1" aria-label="Move down"' + (i === list.length - 1 ? ' disabled' : '') + '>↓</button><button class="icon-btn" data-obj-del="' + i + '" aria-label="Remove">✕</button></span></div>').join('')
         : '<p class="cap">No objectives yet. Without any, the agent uses its own judgement about what matters most.</p>') + '</div>' +
-      '<form class="addline" id="obj-form"><input class="set-in" id="obj-new" placeholder="Add an objective, e.g. Ship every Collector\'s Edition on Sunday" aria-label="New objective" autocomplete="off"><button class="btn" type="submit">Add</button></form>';
+      '<form class="addline" id="obj-form"><input class="set-in" id="obj-new" placeholder="Add an objective, e.g. Deliver every pre-order on time" aria-label="New objective" autocomplete="off"><button class="btn" type="submit">Add</button></form>';
   }
   if (settingsTab === 'suppliers') {
     const field = (i, s, key, label, wide) => '<label' + (wide ? ' class="wide"' : '') + '>' + label + '<input class="set-in" data-sup="' + i + '" data-field="' + key + '" value="' + esc(s[key] || '') + '" autocomplete="off"></label>';
-    return '<div><h3>Suppliers</h3><p class="lead">Who the agent writes to, at which address, in which language. The agent fills this in from the documents; anything you change here overrides what it found, and it will not change your entries.</p></div>' +
+    return '<div><h3>Suppliers</h3><p class="lead">Who Faro writes to, and in which language. Faro fills this in from your documents; what you change here takes precedence.</p></div>' +
       (settings.suppliers.length ? settings.suppliers.map((s, i) => '<div class="sup">' + field(i, s, 'name', 'Supplier') + field(i, s, 'contact', 'Contact person') + field(i, s, 'email', 'Email') + field(i, s, 'language', 'Language') + field(i, s, 'notes', 'Notes', true) +
-        '<div class="sup-foot"><span class="cap">' + (s.by_team ? 'Edited by you' : 'Added by the agent') + '</span><button class="icon-btn" data-sup-del="' + i + '" aria-label="Remove supplier">✕</button></div></div>').join('')
+        '<div class="sup-foot"><span class="cap">' + (s.by_team ? 'Edited by you' : 'Added by Faro') + '</span><button class="icon-btn" data-sup-del="' + i + '" aria-label="Remove supplier">✕</button></div></div>').join('')
         : '<p class="cap">No suppliers yet. The agent adds them as it reads the documents.</p>') +
       '<div><button class="btn" id="sup-add">Add a supplier</button></div>';
   }
@@ -504,19 +504,19 @@ function settingsPane() {
     const row = (name, purpose, on, control) => '<div class="set-row"><div><b>' + esc(name) + '</b><p>' + purpose + '</p></div>' + state(on, 'Connected', 'Disconnected') + (control || '') + '</div>';
     return '<div><h3>Connections</h3><p class="lead">What Faro reads, and where it posts.</p></div>' +
       '<div><h4>Documents</h4>' + row(d.folder || 'No folder', 'The files Faro reads to find problems. It never changes them.', !!d.folder) + '</div>' +
-      '<div><h4>Mailbox</h4>' + row(m.address || 'No mailbox', 'Where approved emails are sent from and replies arrive.', !!(m.address && m.sends)) + '</div>' +
-      '<div><h4>Systems of record</h4>' + (c.systems.length ? c.systems.map((x) => row(x.name, x.adapter ? 'Corrections you approve are posted here.' : 'No connector yet. Corrections are kept for someone to enter by hand.', x.enabled,
+      '<div><h4>Mailbox</h4>' + row(m.address || 'No mailbox', 'Where emails are sent from and replies arrive.', !!(m.address && m.sends)) + '</div>' +
+      '<div><h4>Systems of record</h4>' + (c.systems.length ? c.systems.map((x) => row(x.name, x.adapter ? 'Where corrections to records are posted.' : 'No connector yet. Corrections are kept for someone to enter by hand.', x.enabled,
           x.adapter ? '<button class="switch" data-adapter="' + esc(x.adapter) + '" role="switch" aria-checked="' + x.enabled + '" aria-label="Connect ' + esc(x.name) + '"></button>' : '')).join('')
         : '<p class="cap">None found yet. Faro lists a system once it finds one in your documents.</p>') + '</div>';
   }
-  return '<div><h3>Automation</h3><p class="lead">How much the agent does on its own, and how it deals with suppliers.</p></div><div>' +
-    '<div class="set-row"><div><b>Auto mode</b><p>' + (autoAsk ? 'Emails and actions the agent marks as routine will go out without you reading them first. Anything that commits money or places an order still waits for you.'
-      : 'Routine emails and actions go ahead without asking: questions, status requests, confirmations. Anything that commits money or places an order still waits for your approval.') + '</p>' +
+  return '<div><h3>Automation</h3><p class="lead">How much Faro does on its own, and how it deals with suppliers.</p></div><div>' +
+    '<div class="set-row"><div><b>Auto mode</b><p>' + (autoAsk ? 'Everything Faro proposes will be carried out at once, without you reading it first: every email and every correction, including ones that commit money or place an order.' + (settings.aggressive ? ' Aggressive mode is on, so that includes hard emails that threaten consequences in your name.' : '') + ' Turning this on means you accept that.'
+      : 'Faro carries out everything it proposes without asking: every email and every correction.' + (settings.aggressive ? ' With aggressive mode on, that includes its hard emails.' : '')) + '</p>' +
       (autoAsk ? '<div class="row"><button class="btn btn-primary" data-auto="1">Turn on</button><button class="btn" data-auto="cancel">Cancel</button></div>' : '') + '</div>' +
       '<button class="switch" id="sw-auto" role="switch" aria-checked="' + settings.auto + '" aria-label="Auto mode"></button></div>' +
-    '<div class="set-row"><div><b>Aggressive mode</b><p>The agent gets ruthless with suppliers. It names every failure and who owns it, plays suppliers against each other where a real alternative exists, holds contract penalties against them, sets deadlines in hours and escalates to their management. It threatens the relationship in your name: cancelled orders, no future projects, volume moved to a competitor. It does not lie: every fact it states comes from the documents or the mailbox. These emails always wait for your approval.</p></div>' +
+    '<div class="set-row"><div><b>Aggressive mode</b><p>Faro gets hard with suppliers. It names each failure and who owns it, sets deadlines in hours, holds contract penalties against them and escalates to their management. It threatens the relationship in your name: cancelled orders, no future projects, volume moved to a competitor.</p></div>' +
       '<button class="switch" id="sw-aggr" role="switch" aria-checked="' + settings.aggressive + '" aria-label="Aggressive mode"></button></div>' +
-    '<div class="set-row"><div><b>Forecasting</b><p>The agent looks ahead on its own, about every half hour: it takes stock of everything, simulates the rest of the run, and lists what could still go wrong, each with a response ready. These appear under "Could go wrong" in the list. Each look uses the model, so it costs more to run.</p></div>' +
+    '<div class="set-row"><div><b>Forecasting</b><p>Faro looks ahead about every half hour and lists what could still go wrong, each with a measure to prevent it. Uses more model credit.</p></div>' +
       '<button class="switch" id="sw-forecast" role="switch" aria-checked="' + !!settings.forecasting + '" aria-label="Forecasting"></button></div></div>';
 }
 

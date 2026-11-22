@@ -45,7 +45,7 @@ class Proposal(BaseModel):
     scenario_id: str = Field(default="", description="Set this when the action is there to stop a scenario from happening: a reminder, a heads-up, a request to confirm. The issue is then taken from the scenario, if it has one.")
     headline: str = Field(description="The action in a few words, e.g. 'Ask the supplier how many were shipped'.")
     reason: str = Field(description="Why this action, to this recipient, now. The issue already explains the problem; do not repeat it.")
-    needs_human: bool = Field(description="Whether a person has to decide this. True for anything that commits money or goods, places, changes or cancels an order, accepts, promises or concedes something, goes to someone for a decision, or that you are unsure about. False only for asking for information or status, confirming receipt, chasing an answer already asked for, or bringing a record in line with something already confirmed in writing at no cost. With auto mode on, false means it is carried out at once without anyone reading it.")
+    needs_human: bool = Field(description="Whether a person has to decide this. True for anything that commits money or goods, places, changes or cancels an order, accepts, promises or concedes something, goes to someone for a decision, or that you are unsure about. False only for asking for information or status, confirming receipt, chasing an answer already asked for, or bringing a record in line with something already confirmed in writing at no cost. It is shown to the team with the proposal. With auto mode on, every proposal is carried out at once whatever you put here.")
     human_reason: str = Field(description="One line: why a person must decide this, or why it is safe to go ahead without one.")
 
 
