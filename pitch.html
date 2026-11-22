@@ -110,8 +110,8 @@ const CONFIG = {
   copiesShort: "37,900",
   wrongStock: "145,600",              // 72,000 + 64,000 + 5,600 + 4,000 units caught (chart data)
   copiesBack: "UP TO 32,900",         // Std 608,000→639,100 + CE 66,100→67,900 if Soony acts (chart data)
-  valueBack: "~€2.4M EST.",           // 31,100 × €70 + 1,800 × €150             // both editions, parts in the building vs target (chart data)
-  revenueRisk: "~€3.1M EST.",        // 32,000 Std × €70 + 5,900 CE × €150 (assumed prices)
+  valueBack: "~€2.4M EST.",           // 31,100 × €70 + 1,800 × €110             // both editions, parts in the building vs target (chart data)
+  revenueRisk: "~€2.9M EST.",        // 32,000 Std × €70 + 5,900 CE × €110 (assumed prices); lost = 900 × €70 + 4,100 × €110 ≈ €0.5M
   price: "€30K",                     // per launch (estimate)
   memoQuote: "“A copy that isn't there on day one is refunded and costs us the customer.”",
   memoSource: "Soony CPO memo · launch priorities",
@@ -167,11 +167,11 @@ const SLIDES=[
    notes:`<b>0:25–0:50</b> “Saturday evening at Soony. A scan says 80,000 art books. An inspection report says the statues failed. Emails in Polish, Korean and Chinese. The system says everything is fine.” <b>[→ flip]</b> “Faro read all of it. Only 8,000 art books arrived. 20,000 game cards are stuck in Korea. And an email from Soony's own team quietly changed the delivery terms on a 393,000-dollar order. Faro asked a person 8 times in 4 hours. Everything else it handled.” <b>[→ flip]</b> “And by Sunday morning: art books reordered, game cards in Hamburg, the statue sort ready, Boise's terms caught.”`},
  { title:"what it's worth", cols:COLS3, meta:"none",
    steps:[
-    {rows:worth, cap:CONFIG.memoQuote, small:CONFIG.memoSource+" · revenue estimated at €70 Standard / €150 Collector's", capSize:38},
-    {title:"what faro saved", rows:saved, beam:true, cap:"€2.4M saved. €0.7M lost instead of €3.1M.", small:"Estimate with the steps Faro prepared · €70 Standard / €150 Collector's."},
+    {rows:worth, cap:CONFIG.memoQuote, small:CONFIG.memoSource+" · revenue estimated at €70 Standard / €110 Collector's", capSize:38},
+    {title:"what faro saved", rows:saved, beam:true, cap:"€2.4M saved. €0.5M lost instead of €2.9M.", small:"Estimate with the steps Faro prepared · €70 Standard / €110 Collector's."},
     {title:"what's next", rows:scale, cycle:true, cap:"Connectors, not a custom build.", small:"Every company with suppliers and a deadline — like the 175 enterprises Lio already runs procurement for."},
    ],
-   notes:`<b>worth</b> “Soony's own memo: a copy that isn't there on day one is refunded and costs them the customer. Right now Soony is 37,900 copies short — roughly three million euros.” <b>[→]</b> “With Faro: 32,900 copies back, only 5,000 short instead of 37,900. Soony loses about 0.7 million instead of 3.1 — with the steps Faro prepared. Faro costs about 30,000 euros per launch.” <b>[→]</b> “And nothing is built for Soony. Faro plugs in through connectors — SAP, mail, documents. Every company with suppliers and a deadline has this Sunday, starting with the 175 companies Lio already runs procurement for.”`},
+   notes:`<b>worth</b> “Soony's own memo: a copy that isn't there on day one is refunded and costs them the customer. Right now Soony is 37,900 copies short — roughly 2.9 million euros.” <b>[→]</b> “With Faro: 32,900 copies back, only 5,000 short instead of 37,900. Soony loses about half a million instead of 2.9 — with the steps Faro prepared. Faro costs about 30,000 euros per launch.” <b>[→]</b> “And nothing is built for Soony. Faro plugs in through connectors — SAP, mail, documents. Every company with suppliers and a deadline has this Sunday, starting with the 175 companies Lio already runs procurement for.”`},
  { title:"now boarding", cols:COLS4, meta:"none",
    steps:[{rows:[["FARO",{t:"LIVE",c:GREEN},"NOW BOARDING ▸"]], cap:"Let's look at it live.", small:""}],
    notes:`<b>1:20–1:30</b> “Let's look at it live.” <b>→ switch to Faro.</b><br><b>Demo:</b> issue list → I-1: scan vs goods receipt, 80,000 vs 8,000 → A-2 approved → posted to SAP (REC-261121-0001) → I-7: Faro flagged the unapproved EXW switch on a USD 393,000 order → the rule: nothing leaves the building without a human.`},
@@ -290,7 +290,7 @@ function meta(kind){
 }
 
 function next(){ const S=SLIDES[cur]; if(step<S.steps.length-1) show(cur,step+1,true); else if(cur<SLIDES.length-1) show(cur+1,0,true); }
-function prev(){ if(step>0) show(cur,step-1,false); else if(cur>0){ show(cur-1, SLIDES[cur-1].steps.length-1, false);} }
+function prev(){ if(step>0) show(cur,step-1,true); else if(cur>0){ show(cur-1, SLIDES[cur-1].steps.length-1, true);} }
 
 document.addEventListener("keydown",e=>{
   if(["ArrowRight","ArrowDown"," ","PageDown","Enter"].includes(e.key)){ e.preventDefault(); next(); }
