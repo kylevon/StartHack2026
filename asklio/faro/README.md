@@ -2,7 +2,7 @@
 
 An agent that runs continuously over a folder of business documents, finds what is wrong or at risk, and asks a person before it changes anything.
 
-Built on LangChain (`langchain.agents.create_agent`, the runtime LangGraph and deepagents share) and served locally with a three-part UI: approvals on the left, the selected decision in the centre, chat on the right.
+Built on LangChain (`langchain.agents.create_agent`, the runtime LangGraph and deepagents share) and served locally with a three-part UI: issues and approvals on the left, the selected decision and its history in the centre, updates and chat on the right.
 
 ## Run
 
