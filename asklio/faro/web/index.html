@@ -169,6 +169,19 @@ tr:last-child td{border-bottom:0}
 .rich code,.tl-sum code{font-family:var(--mono);font-size:.92em;background:rgba(29,29,31,.07);border-radius:5px;padding:0 4px}
 .bubble.user{background:var(--accent);color:var(--accent-ink);align-self:flex-end}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
+.upd{display:flex;gap:10px;align-items:baseline;width:100%;border:0;background:transparent;padding:0 2px;text-align:left;font-size:13px;line-height:1.45;color:var(--ink-2)}
+.upd time{flex:none;width:58px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.upd span{min-width:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.upd b{font-weight:600;color:var(--ink)}
+button.upd:hover b{color:var(--accent)}
+.feed > *{flex-shrink:0}
+.bubble.foldable{position:relative;cursor:pointer;padding-bottom:32px}
+.bubble.foldable::after{content:'Show less';position:absolute;left:14px;bottom:9px;font-size:12px;font-weight:600;color:var(--accent)}
+.bubble.fold{max-height:9.6em;overflow:hidden}
+.bubble.fold::after{content:'Show more';right:0;left:0;bottom:0;padding:22px 14px 9px;border-radius:0 0 20px 20px;background:linear-gradient(transparent,var(--hi) 46%)}
+.flash{animation:flash 2.6s ease-out;border-radius:14px}
+@keyframes flash{0%,35%{box-shadow:0 0 0 3px rgba(0,113,227,.45)}100%{box-shadow:0 0 0 3px transparent}}
+.feed.none::before{content:'Updates from Faro appear here: what it finds, what it needs from you, and what was decided.';font-size:13px;color:var(--muted);padding:6px 2px}
 .step{display:block;width:100%;border:0;background:transparent;padding:0 2px;text-align:left;font-size:13px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
 .step i{font-style:normal;font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-right:6px}
 .step.open{white-space:pre-wrap;color:var(--ink-2)}
@@ -304,10 +317,10 @@ h2,.set-pane h4,.grp{text-transform:none;letter-spacing:.01em;font-size:14.5px}
   </main>
   <aside class="right" id="right" data-open="0" aria-label="Chat with the agent">
     <div class="chat">
-      <div class="chat-head" id="chat-head"><b>Agent</b><span><i class="pulse"></i><em id="status" style="font-style:normal">connecting</em></span>
+      <div class="chat-head" id="chat-head"><b>Updates</b><span><i class="pulse"></i><em id="status" style="font-style:normal">connecting</em></span>
         <button class="chat-close" id="chat-close" aria-label="Close chat">×</button></div>
       <div class="feed" id="feed"></div>
-      <form class="ask" id="ask-form"><input id="ask-input" type="text" placeholder="Message the agent" autocomplete="off" aria-label="Message the agent"><button type="submit" aria-label="Send">↑</button></form>
+      <form class="ask" id="ask-form"><input id="ask-input" type="text" placeholder="Ask Faro or tell it something" autocomplete="off" aria-label="Message the agent"><button type="submit" aria-label="Send">↑</button></form>
     </div>
   </aside>
   <button class="fab" id="chat-open">Chat</button>
@@ -567,7 +580,7 @@ function lookView() {
 }
 
 function approvalCard(a) {
-  return '<div class="next"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(bare(a.headline)) + '</h3><div class="reason rich">' + rich(a.reason) + '</div>' + (a.human_reason ? '<p class="cap" style="margin-top:8px">' + (a.needs_human ? 'Needs you: ' : 'Routine, would go ahead in auto mode: ') + mdi(a.human_reason) + '</p>' : '') + '</div>' +
+  return '<div class="next" data-card="' + a.id + '"><div><div class="sevline sev-info">' + toolTag[a.tool] + ' · ' + a.id + '</div><h3>' + esc(bare(a.headline)) + '</h3><div class="reason rich">' + rich(a.reason) + '</div>' + (a.human_reason ? '<p class="cap" style="margin-top:8px">' + (a.needs_human ? 'Needs you: ' : 'Routine, would go ahead in auto mode: ') + mdi(a.human_reason) + '</p>' : '') + '</div>' +
     actionView(a) +
     '<div class="row"><input class="note-in" id="note-' + a.id + '" type="text" placeholder="Optional note to the agent" aria-label="Note to the agent" autocomplete="off">' +
     '<button class="btn" data-decide="0" data-id="' + a.id + '">Reject</button><button class="btn btn-primary" data-decide="1" data-id="' + a.id + '">' + (a.live ? (a.tool === 'send_email' ? 'Approve and send' : 'Approve and post') : 'Approve') + '</button></div>' +
@@ -673,7 +686,7 @@ function timeline(id) {
         : '<div class="tl-full rich">' + rich(e.text) + '</div>';
       const rest = mail ? (e.kind === 'mail_sent' ? 'to ' + esc(people(e.to).join(', ')) : 'from ' + esc(person(e.from))) + (e.unfiled ? ' · not filed by the agent yet' : '') : esc(did) + (e.ref ? ' · ' + esc(e.ref) : '');
       const line = '<span class="tl-sum">' + mdi(short) + '</span>' + (more ? '<span class="chev' + (open ? ' up' : '') + '" aria-hidden="true">›</span>' : '');
-      return '<div class="tl"><div class="tl-head"><span><span class="badge b-' + tone + '">' + who + '</span><span class="tl-did">' + rest + '</span></span><time>' + esc(stamp(e.ts)) + '</time></div>' +
+      return '<div class="tl" data-key="' + esc(key) + '"><div class="tl-head"><span><span class="badge b-' + tone + '">' + who + '</span><span class="tl-did">' + rest + '</span></span><time>' + esc(stamp(e.ts)) + '</time></div>' +
         (more ? '<button class="tl-line" data-expand="' + esc(key) + '" aria-expanded="' + open + '" title="' + (open ? 'Show less' : 'Show all') + '">' + line + '</button>' : '<div class="tl-line">' + line + '</div>') + full + '</div>';
     }).join('') + '</div>';
 }
@@ -697,6 +710,55 @@ async function loadHistory() {
   if (id !== (view === 'look' ? lookSel : selected)) return;
   historyData = { id, ...data };
   if (view === 'history' || (view === 'look' && lookTab === 'history')) renderCenter(true);
+  showWanted();
+}
+// An email clicked in the updates panel: once its issue's history is on screen, open that email there and bring it into view.
+let wanted = null;
+const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+function showWanted() {
+  if (!wanted || !historyData || historyData.id !== wanted.issue || view !== 'history') return;
+  const entry = [...historyData.entries].reverse().find(wanted.test);
+  wanted = null;
+  if (!entry) return;
+  const key = entry.kind + (entry.message_id || entry.ts);
+  expanded.add(key); renderCenter(true);
+  const row = [...document.querySelectorAll('#view .tl')].find((el) => el.dataset.key === key);
+  if (!row) return;
+  point(row);
+}
+function point(el) {
+  if (!el) return;
+  el.scrollIntoView({ block: 'center' });
+  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2600);
+}
+// A line in the updates panel leads to the place it is about: a new issue to its page, a request for approval to the card where it is
+// decided (or, once decided, to that decision in the history), a decision or an email to its entry in the history.
+function follow(e, u) {
+  const history = (issue, test) => { wanted = { issue, test }; selected = issue; historyData = null; show('history'); };
+  if (u.mail) {
+    const issue = issueOfMail(e), start = flatten(e.text).slice(0, 80);
+    return issue ? (history(issue, (x) => x.kind === 'mail_received' && flatten(x.text).startsWith(start)), true) : false;
+  }
+  const a = e.approval && approvals.get(e.approval);
+  if (a && a.status === 'pending' && e.verb === 'Asked') {
+    if (a.scenario_id && outlook.scenarios.some((x) => x.id === a.scenario_id)) { lookSel = a.scenario_id; lookTab = 'decision'; view = 'look'; historyData = null; renderLeft(); renderCenter(true); }
+    else { if (!issues.has(a.issue_id)) return false; selected = a.issue_id; historyData = null; show('decision'); }
+    point([...document.querySelectorAll('#view .next')].find((el) => el.dataset.card === a.id));
+    return true;
+  }
+  const DECIDED = ['approved', 'auto_approved', 'sent', 'auto_sent', 'rejected', 'withdrawn', 'failed'];
+  if (a && issues.has(a.issue_id)) return history(a.issue_id, (x) => x.ref === a.id && (e.verb === 'Asked' ? x.kind === 'proposed' : DECIDED.includes(x.kind))), true;
+  if (e.open && issues.has(e.open)) { selected = e.open; historyData = null; show('decision'); $('center').scrollTop = 0; return true; }
+  return false;
+}
+// Which issue an email in the updates panel belongs to: the one the agent filed it under, else the one its thread was linked to since,
+// else the issue the same sender's other mail belongs to.
+function issueOfMail(e) {
+  if (e.open && issues.has(e.open)) return e.open;
+  for (const i of issues.values()) if (e.thread && (i.thread_ids || []).includes(e.thread)) return i.id;
+  const from = (String(e.label).match(/<([^>]+)>/) || [])[1];
+  const other = from && [...feed].reverse().find((x) => x.kind === 'mail' && x.open && issues.has(x.open) && String(x.label).includes('<' + from + '>'));
+  return other ? other.open : null;
 }
 
 /* ---------- rendering ---------- */
@@ -735,7 +797,28 @@ function renderCenter(force) {
   if (issue && view === 'decision' && evidenceOpen.get(issue.id)) loadEvidence(evidenceOpen.get(issue.id));
 }
 
-let feedShown = 0;
+// The side panel is a short, readable log for the people using Faro: what it found, what it needs from them, what was decided,
+// which emails came in, and the conversation with the agent. How the agent got there (files it opened, its reasoning) stays out.
+let feedShown = 0, lastProblem = '';
+function update(e) {
+  if (e.kind === 'chip') {
+    const verb = { Found: 'New issue', Asked: 'Needs your approval', Withdrew: 'Withdrawn', 'Auto sent': 'Sent automatically', 'Auto approved': 'Approved automatically', 'Auto failed': 'Could not be sent' , Failed: 'Could not be sent' }[e.verb] || e.verb;
+    return { verb, text: bare(e.label), open: e.open, history: e.history };
+  }
+  if (e.kind === 'mail' && (e.verb === 'Mail from' || e.verb === 'Reply from')) {
+    const cut = String(e.label || '').indexOf(': ');
+    const who = person(cut < 0 ? e.label : e.label.slice(0, cut)), subject = cut < 0 ? '' : e.label.slice(cut + 2).replace(/^(re|aw|odp|fwd?):\s*/i, '');
+    if (/mailer-daemon|postmaster/i.test(e.label)) return { verb: 'An email could not be delivered', text: '' };
+    return { verb: 'Email from ' + who, text: subject, mail: true };
+  }
+  if (e.kind === 'error') {
+    const text = /credit balance/i.test(e.text) ? 'The agent has stopped: the AI account is out of credit.' : /^[A-Z][a-zA-Z]*(Error|Exception)\b/.test(e.text) ? 'The agent ran into a technical problem and stopped this step.' : e.text;
+    if (text === lastProblem) return null;   // the same problem over and over is one update
+    lastProblem = text;
+    return { verb: 'Problem', text };
+  }
+  return null;   // reasoning, steps and file reads are not shown
+}
 function renderFeed() {
   const el = $('feed');
   for (; feedShown < feed.length; feedShown++) {
@@ -743,32 +826,35 @@ function renderFeed() {
     if (e.kind === 'user' || e.kind === 'agent') {
       const div = document.createElement('div');
       div.className = 'bubble ' + e.kind; if (e.kind === 'agent') { div.classList.add('rich'); div.innerHTML = md(e.text); } else div.textContent = e.text; el.appendChild(div);
-    } else if (e.kind === 'thought' || e.kind === 'step') {
-      const line = document.createElement('button');
-      line.className = 'step'; line.type = 'button';
-      const tag = document.createElement('i'); tag.textContent = e.kind === 'thought' ? 'Thought' : 'Step';
-      const body = document.createElement('span'); body.innerHTML = mdi(e.label);
-      line.append(tag, body);
-      line.addEventListener('click', () => { const open = line.classList.toggle('open'); body.innerHTML = open ? md(e.text) : mdi(e.label); });
-      el.appendChild(line);
-    } else if (e.kind === 'error') {
-      const div = document.createElement('div');
-      div.className = 'event'; div.textContent = clock(e.ts) + ' · ' + e.text; el.appendChild(div);
-    } else {
-      let row = el.lastElementChild;
-      if (!row || !row.classList.contains('chips')) { row = document.createElement('div'); row.className = 'chips'; el.appendChild(row); }
-      const chip = document.createElement(e.open ? 'button' : 'span');
-      chip.className = 'chip' + (e.tone ? ' ' + e.tone : '');
-      chip.title = clock(e.ts) + ' · ' + e.text;
-      if (e.open) { chip.dataset.open = e.open; if (e.history) chip.dataset.history = '1'; }
-      const verb = document.createElement('i'); verb.textContent = e.verb;
-      const label = document.createElement('span'); label.textContent = bare(e.label);
-      chip.append(verb, label); row.appendChild(chip);
+      if (e.kind === 'agent' && e.text.length > 320) {   // long reports start folded; one click shows the rest
+        div.classList.add('foldable', 'fold'); div.setAttribute('role', 'button');
+        div.addEventListener('click', () => { if (!String(getSelection())) div.classList.toggle('fold'); });
+      }
+      lastProblem = '';
+      continue;
     }
+    const u = update(e);
+    if (!u) continue;
+    const row = document.createElement(u.open || u.mail ? 'button' : 'div');
+    row.className = 'upd';
+    if (u.open || u.mail) {
+      row.type = 'button';
+      row.addEventListener('click', (ev) => {
+        ev.stopPropagation();   // this line decides where it leads; the general card handler does not apply
+        if (!follow(e, u)) row.title = 'This is not linked to an issue yet';
+        else if (matchMedia('(max-width:760px)').matches) $('right').dataset.open = '0';
+      });
+    }
+    const when = document.createElement('time'); when.textContent = clock(e.ts);
+    const body = document.createElement('span');
+    const verb = document.createElement('b'); verb.textContent = u.verb;
+    body.append(verb, u.text ? ' · ' + u.text : '');
+    row.append(when, body); el.appendChild(row);
   }
+  if (!el.childElementCount && !el.dataset.empty) { el.dataset.empty = '1'; }
+  el.classList.toggle('none', !el.childElementCount);
   el.scrollTop = el.scrollHeight;
 }
-
 function render() {
   dirty = false;
   if (!issues.has(selected)) selected = ([...issues.values()].find((i) => pendingOf(i).length) || [...issues.values()][0] || {}).id || null;
@@ -795,8 +881,8 @@ function apply(e) {
     const a = e.approval, before = approvals.get(a.id);
     approvals.set(a.id, a);
     if ((a.issue_id === selected || (view === 'look' && a.scenario_id === lookSel)) && live) historyChanged();
-    if (!before && a.status === 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.issue_id });
-    else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: a.status === 'withdrawn' ? 'Withdrew' : (a.auto ? 'Auto ' : '') + (a.outcome === 'done' ? (a.auto ? 'sent' : 'Sent') : a.outcome === 'failed' ? (a.auto ? 'failed' : 'Failed') : a.status === 'approved' ? (a.auto ? 'approved' : 'Approved') : 'Rejected'), label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
+    if (!before && a.status === 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.issue_id, approval: a.id });
+    else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: a.status === 'withdrawn' ? 'Withdrew' : (a.auto ? 'Auto ' : '') + (a.outcome === 'done' ? (a.auto ? 'sent' : 'Sent') : a.outcome === 'failed' ? (a.auto ? 'failed' : 'Failed') : a.status === 'approved' ? (a.auto ? 'approved' : 'Approved') : 'Rejected'), label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, approval: a.id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
   }
   else if (e.kind === 'auto') { /* from before settings existed; the server's settings are current */ }
   else if (e.kind === 'settings') {

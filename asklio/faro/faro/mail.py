@@ -154,7 +154,8 @@ ENGLISH:
 
 
 def translator(model, cache):
-    """Returns the function that gives the English of a mailbox message. Each message is translated once, then remembered in `cache`."""
+    """Returns the function that gives the English of a mailbox message. Each message is translated once, then remembered in `cache`.
+    Without a model (Faro paused) it only gives back what was translated before."""
     pending: dict = {}
 
     async def work(message_id: str, text: str) -> dict:
@@ -170,7 +171,7 @@ def translator(model, cache):
     async def translate(message_id: str, text: str) -> dict:
         if (cache.get(message_id) or {}).get("v") == 2:  # entries saved in an older form are done again, once
             return cache[message_id]
-        if not text.strip():
+        if not text.strip() or model is None:
             return {"language": "", "summary": "", "english": ""}
         if message_id not in pending:  # two viewers of one thread share one call
             pending[message_id] = asyncio.ensure_future(work(message_id, text))
@@ -214,6 +215,8 @@ def summarizer(model, cache):
     async def summarize(text: str) -> str:
         key = hashlib.sha1(text.encode()).hexdigest()
         if key not in cache:
+            if model is None:  # paused: only what was summarised before
+                return ""
             reply = await model.ainvoke([("system", SUMMARY_PROMPT), ("human", text)])
             raw = reply.content if isinstance(reply.content, str) else "".join(b.get("text", "") for b in reply.content if isinstance(b, dict) and b.get("type") == "text")
             cache[key] = " ".join(raw.split())
@@ -242,6 +245,8 @@ def emphasizer(model, cache):
     async def emphasize(text: str) -> str:
         key = hashlib.sha1(text.encode()).hexdigest()
         if key not in cache:
+            if model is None:  # paused: only what was marked up before
+                return text
             reply = await model.ainvoke([("system", EMPHASIS_PROMPT), ("human", text)])
             marked = (reply.content if isinstance(reply.content, str) else "".join(b.get("text", "") for b in reply.content if isinstance(b, dict) and b.get("type") == "text")).strip()
             cache[key] = marked if _words(marked) == _words(text) else text  # any change of wording is thrown away

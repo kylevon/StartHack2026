@@ -72,6 +72,10 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
                 # No agent and no watchers: the record can be read and decided on, and nothing new is announced to
                 # an agent that is not there. Mail and files that arrive meanwhile are picked up at the next real start.
                 hub.emit("status", value="paused")
+                # Translations, summaries and highlights made earlier are still shown; nothing new is made while paused.
+                hub.translate_mail = mail.translator(None, hub.store.cache("translations"))
+                hub.summarize = mail.summarizer(None, hub.store.cache("summaries"))
+                hub.emphasize = mail.emphasizer(None, hub.store.cache("emphasis"))
                 if config.MAIL_ENABLED and mailbox is not False:
                     # A person approving an email is a decision that needs no agent: it is still sent. Nothing watches for the reply until the agent is back.
                     hub.mailbox = mailbox or mail.Mailbox(config.MAIL_INBOX, config.MAIL_API_KEY)

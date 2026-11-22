@@ -1016,3 +1016,23 @@ def test_word_documents_are_read_searched_and_previewed(tmp_path):
     assert files.preview(tmp_path, "memo.docx")["kind"] == "text" and "Art book | 8000" in files.preview(tmp_path, "memo.docx")["text"]
     with pytest.raises(files.FileError, match="could not be opened"):
         files.read(tmp_path, "broken.docx")
+
+
+async def test_without_a_model_saved_translations_summaries_and_highlights_are_still_given():
+    import hashlib
+
+    from faro import mail
+
+    key = lambda text: hashlib.sha1(text.encode()).hexdigest()
+    translations = {"<m1>": {"v": 2, "language": "Polish", "summary": "Truck **confirmed**.", "english": "Good morning."}}
+    translate = mail.translator(None, translations)
+    assert (await translate("<m1>", "Dzień dobry."))["english"] == "Good morning."
+    assert await translate("<m2>", "Nowa wiadomość.") == {"language": "", "summary": "", "english": ""} and "<m2>" not in translations
+
+    summaries = {key("A long entry."): "Short."}
+    summarize = mail.summarizer(None, summaries)
+    assert await summarize("A long entry.") == "Short." and await summarize("Never seen.") == "" and len(summaries) == 1
+
+    marked = {key("Call Raj by 22:00."): "Call **Raj** by **22:00**."}
+    emphasize = mail.emphasizer(None, marked)
+    assert await emphasize("Call Raj by 22:00.") == "Call **Raj** by **22:00**." and await emphasize("New text.") == "New text." and len(marked) == 1
