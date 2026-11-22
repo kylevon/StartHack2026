@@ -1,0 +1,57 @@
+chart,label,series,value,unit,note
+1 System vs usable,Art books,System says,77800,units,ERP book stock Sat 21 Nov 20:50
+1 System vs usable,Art books,Usable,5800,units,"77,800 minus the 72,000 never delivered (supplier confirmed 8,000 not 80,000)"
+1 System vs usable,Sleeves,System says,116000,units,ERP book stock Sat 21 Nov 20:50
+1 System vs usable,Sleeves,Usable,48000,units,"Rev C only; estimate from supplier paperwork, not counted"
+1 System vs usable,Statues,System says,13900,units,ERP book stock Sat 21 Nov 20:50
+1 System vs usable,Statues,Usable,8300,units,"13,900 minus the 5,600 that failed inspection"
+1 System vs usable,Game cards due by air,System says,48000,units,ERP open shipment SHP-2026-04311
+1 System vs usable,Game cards due by air,Usable,28000,units,"Arrived 21 Nov; 20,000 left behind by the airline"
+2 Copies at risk the plan marked ok,Game cases (Standard),Copies at risk,32000,copies,"6,000 in stock against 38,000 to pack"
+2 Copies at risk the plan marked ok,Game cards (Standard),Copies at risk,6800,copies,"42,900 in stock against 49,700 to pack, both editions"
+2 Copies at risk the plan marked ok,Art books (Collector's),Copies at risk,5900,copies,"5,800 usable against 11,700 to pack"
+2 Copies at risk the plan marked ok,Statues (Collector's),Copies at risk,3400,copies,"8,300 good against 11,700 to pack"
+2 Copies at risk the plan marked ok,Magnets (the plan's only warning),Copies at risk,0,copies,Fitted by the supplier into the box; not a separate part
+3 Days in the documents before anyone acted,Wrong delivery term on Boise orders,Days,500,days,"First PO with DDP 9 Jul 2025; contract says EXW; acted on 21 Nov 2026"
+3 Days in the documents before anyone acted,New sleeve artwork not in master data,Days,106,days,"Artwork sent 7 Aug 2026; master data changed 21 Nov 2026"
+3 Days in the documents before anyone acted,Statue supplier's release expired,Days,22,days,"Expired 30 Oct 2026; found 21 Nov 2026"
+3 Days in the documents before anyone acted,Failed statue lot booked as usable,Days,4,days,"Received 17 Nov 2026; found 21 Nov 2026"
+3 Days in the documents before anyone acted,"80,000 art books booked for 8,000",Days,3,days,"Booked 18 Nov 2026; found 21 Nov 2026"
+3 Days in the documents before anyone acted,"Air shipment came 20,000 short",Days,1,days,"Advice created Fri 20 Nov 23:48; acted on Sat 21 Nov 18:37 (under one day)"
+4 Mistakes caught from the documents,Sleeves on order in the blocked revision,Units,385000,units,"POs 4500318752 (145,000, already at sea), 4500318765 (125,000), 4500318786 (115,000); about 240,000 actually on hold"
+4 Mistakes caught from the documents,Art books in the system that never arrived,Units,72000,units,GR 5000413065
+4 Mistakes caught from the documents,Blocked-revision sleeves identified in stock,Units,64000,units,"GR 5000413064, confirmed rev B by the supplier"
+4 Mistakes caught from the documents,Rejected statues booked as usable,Units,5600,units,GR 5000413063
+4 Mistakes caught from the documents,Wrong sleeves booked as correct on Saturday,Units,4000,units,"GR 5000413071, admitted by the supplier"
+5 Gap vs remedy secured,Art books,Gap,5900,units,
+5 Gap vs remedy secured,Art books,Remedy secured,8000,units,"Ordered and accepted 21 Nov 21:23; not shipped as of Sun 10:00"
+5 Gap vs remedy secured,Statues,Gap,3400,units,
+5 Gap vs remedy secured,Statues,Remedy secured,5200,units,"Estimate: 5,600 lot at the inspected defect rate; needs Soony Quality release"
+5 Gap vs remedy secured,Game cards,Gap,6800,units,
+5 Gap vs remedy secured,Game cards,Remedy secured,56000,units,"36,000 Boise (Frankfurt 23 Nov) plus 20,000 Hwaseong (Hamburg 24 Nov); after launch"
+5 Gap vs remedy secured,Sleeves mislabelled,Gap,4000,units,
+5 Gap vs remedy secured,Sleeves mislabelled,Remedy secured,4000,units,"Free replacement promised on the next transport"
+6 Minutes to a written supplier answer,Art-book order accepted,Minutes,228,minutes,"First ask Sat 17:35, accepted 21:23"
+6 Minutes to a written supplier answer,Statue deviation request and sort criteria,Minutes,148,minutes,"First ask Sat 18:37, received 21:05"
+6 Minutes to a written supplier answer,Hold on printing blocked-revision sleeves,Minutes,12,minutes,"Asked Sun 09:18, hold confirmed 09:30"
+6 Minutes to a written supplier answer,Art-book delivery quantity confirmed,Minutes,4,minutes,"Asked Sat 17:35, confirmed 17:39"
+6 Minutes to a written supplier answer,Mislabelled sleeve pallet admitted,Minutes,4,minutes,"Asked Sat 21:48, admitted 21:52"
+6 Minutes to a written supplier answer,Sleeve revision confirmed (two suppliers),Minutes,3,minutes,"Asked Sat 18:37, both confirmed 18:40"
+6 Minutes to a written supplier answer,Game cards released from hold,Minutes,3,minutes,"Confirmation sent Sat 18:47, release 18:50"
+7 Copies by Sunday 20:00,Collector's Edition,Target,72000,copies,
+7 Copies by Sunday 20:00,Collector's Edition,Can be done now,66100,copies,"60,300 packed Sat 20:50 plus 5,800; limited by art books"
+7 Copies by Sunday 20:00,Collector's Edition,Might be done (low),67500,copies,"If the art-book truck had left Poznan by about 09:30"
+7 Copies by Sunday 20:00,Collector's Edition,Might be done (high),67900,copies,"If the art-book truck had left Poznan by about 09:00"
+7 Copies by Sunday 20:00,Collector's Edition,If nothing had been done,66100,copies,
+7 Copies by Sunday 20:00,Standard Edition,Target,640000,copies,
+7 Copies by Sunday 20:00,Standard Edition,Can be done now,608000,copies,"602,000 packed Sat 20:50 plus 6,000; limited by game cases"
+7 Copies by Sunday 20:00,Standard Edition,Might be done (low),637300,copies,"If Soony collects the game cases; then limited by game cards"
+7 Copies by Sunday 20:00,Standard Edition,Might be done (high),639100,copies,"If Soony collects the game cases; then limited by game cards"
+7 Copies by Sunday 20:00,Standard Edition,If nothing had been done,608000,copies,
+8 Headline numbers,Files in the data folder,Count,335,files,Snapshot of Sun 22 Nov 09:17
+8 Headline numbers,Scans read,Count,72,files,60 on Saturday afternoon and 12 from the 21:46 drop
+8 Headline numbers,Contracts read,Count,6,files,
+8 Headline numbers,Emails sent to suppliers,Count,111,emails,Team inbox as of Sun 22 Nov 09:50
+8 Headline numbers,Replies from suppliers,Count,105,emails,Team inbox as of Sun 22 Nov 09:50
+8 Headline numbers,Median supplier reply time,Minutes,3.2,minutes,"105 replies matched to the message they answered; 90th percentile 4.0"
+8 Headline numbers,Copies short of target from parts in the building,Copies,37900,copies,"Both editions; 712,000 target minus 674,100"
