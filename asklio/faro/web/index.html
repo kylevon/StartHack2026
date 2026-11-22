@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="only light">
 <title>Faro</title>
+<link rel="icon" type="image/png" href="/brand/faro-icon.png">
 <style>
 /* Three parts on one soft surface. Only two things are raised: the approval cards on the left and the chat panel on the right. Everything inside them, and the whole centre, is flat. Light only. */
 :root{
@@ -20,6 +21,7 @@
   --pressed:inset 3px 3px 7px var(--lo),inset -3px -3px 7px var(--hi);
 }
 html,body{height:100%;margin:0}
+@font-face{font-family:'Getboreg';src:url('/brand/Getboreg-Regular.ttf') format('truetype');font-display:swap}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box;scrollbar-width:none}
 *::-webkit-scrollbar{display:none}
@@ -80,7 +82,7 @@ a{color:var(--accent)}
 @media (max-width:700px){.sheet-body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}.set-nav{flex-direction:row;border-right:0;border-bottom:1px solid var(--hair);overflow-x:auto}.sup{grid-template-columns:minmax(0,1fr)}}
 .auto .btn{padding:7px 14px;font-size:13px}
 .brand{padding:0 2px 4px}
-.brand b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
+.brand img{display:block;height:34px;width:auto;margin:0 0 8px -1px}
 .brand span{font-size:13px;color:var(--muted)}
 .ap{display:block;text-align:left;width:100%;border:0;border-radius:22px;background:var(--bg);padding:15px 17px;box-shadow:var(--raised);transition:box-shadow .18s ease}
 .ap.on{box-shadow:var(--pressed)}
@@ -277,6 +279,13 @@ button.chip:hover{background:rgba(0,113,227,.12)}
 .chev{flex:none;display:inline-block;width:22px;height:22px;line-height:20px;text-align:center;font-size:20px;color:var(--muted);transform:rotate(90deg);transition:transform .15s ease}
 .chev.up{transform:rotate(-90deg)}
 button.tl-line:hover .chev{color:var(--ink)}
+h2,.set-pane h3,.set-pane h4,.sheet-head b,.grp,.seg button,.chat-head b{font-family:'Getboreg',var(--font);font-weight:400}
+h2,.set-pane h4,.grp{text-transform:none;letter-spacing:.01em;font-size:14.5px}
+.grp span{font-size:12.5px}
+.risk,.sevline{font-family:'Getboreg',var(--font);font-weight:400;text-transform:none;letter-spacing:.01em}
+.risk{font-size:13px}
+.sevline{font-size:14.5px}
+.risk::first-letter,.sevline::first-letter{text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -425,7 +434,7 @@ const watching = () => outlook.scenarios.filter((x) => x.status === 'watching').
 function renderLeft() {
   const list = [...issues.values()].sort((a, b) => groupOf(a) - groupOf(b) || RISK[a.severity] - RISK[b.severity] || b.updated - a.updated);
   const waiting = [...approvals.values()].filter((a) => a.status === 'pending').length;
-  let html = '<div class="brand"><b>Faro</b><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>';
+  let html = '<div class="brand"><img src="/brand/faro-logo.png" alt="Faro"><span>' + (waiting ? waiting + (waiting === 1 ? ' approval waiting' : ' approvals waiting') : 'Nothing is waiting for you') + '</span></div>';
   if (!list.length) html += '<p class="hint">Issues appear here as the agent finds them. Each one keeps its evidence, its next action and its history together.</p>';
   const heading = (key, name, count, you) => '<button class="grp' + (you ? ' you' : '') + '" data-fold="' + key + '" aria-expanded="' + !folded.has(key) + '"><span class="grp-name"><i class="chev' + (folded.has(key) ? '' : ' up') + '" aria-hidden="true">›</i>' + name + '</span><span>' + count + '</span></button>';
   const card = (i, g) => { const line = detail(i); return '<button class="ap ' + (i.id === selected && view !== 'look' ? 'on ' : '') + (g >= 3 ? 'done' : '') + '" data-open="' + i.id + '" title="' + esc(bare(i.title)) + '">' +
@@ -454,8 +463,7 @@ const TABS = [['objectives', 'Objectives', 'target'], ['suppliers', 'Suppliers',
 const adapterFor = (system) => (settings.adapters || []).find((a) => a.enabled && String(system || '').toLowerCase().includes(a.system.toLowerCase()));
 
 function renderAuto() {   // the settings button at the bottom of the left column
-  const modes = [settings.auto ? 'Auto mode on' : '', settings.aggressive ? 'Aggressive mode on' : '', settings.forecasting ? 'Forecasting on' : '', ...(settings.adapters || []).filter((a) => a.enabled).map((a) => a.system + ' connected')].filter(Boolean).join(' · ');
-  $('auto').innerHTML = '<button class="setbtn" id="open-settings">' + ICON.gear + '<span style="min-width:0"><b>Settings</b><span>' + (modes || settings.objectives.length + (settings.objectives.length === 1 ? ' objective' : ' objectives') + ' · ' + settings.suppliers.length + ' suppliers') + '</span></span></button>';
+  $('auto').innerHTML = '<button class="setbtn" id="open-settings">' + ICON.gear + '<span style="min-width:0"><b>Settings</b><span>' + (settings.objectives.length + (settings.objectives.length === 1 ? ' objective' : ' objectives') + ' · ' + settings.suppliers.length + (settings.suppliers.length === 1 ? ' supplier' : ' suppliers')) + '</span></span></button>';
 }
 
 function settingsPane() {

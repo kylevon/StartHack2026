@@ -57,6 +57,9 @@ class DecisionIn(BaseModel):
     note: str = ""
 
 
+BRAND_FILES = {"faro-icon.png", "faro-logo.png", "Getboreg-Regular.ttf"}  # the only files served from brand/
+
+
 def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mailbox=None, database_url=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -113,6 +116,12 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
     @app.get("/")
     async def index():
         return FileResponse(config.WEB_DIR / "index.html")
+
+    @app.get("/brand/{name}")
+    async def brand(name: str):
+        if name not in BRAND_FILES:
+            raise HTTPException(404, "No such brand file.")
+        return FileResponse(config.BRAND_DIR / name, headers={"Cache-Control": "public, max-age=86400"})
 
     @app.get("/api/events")
     async def events(after: int = 0):

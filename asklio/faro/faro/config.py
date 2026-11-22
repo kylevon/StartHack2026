@@ -18,6 +18,7 @@ MODEL = os.environ.get("FARO_MODEL", "anthropic:claude-opus-5-5")
 POLL_SECONDS = float(os.environ.get("FARO_POLL_SECONDS", "5"))
 PORT = int(os.environ.get("FARO_PORT", "8000"))
 WEB_DIR = APP_DIR / "web"
+BRAND_DIR = APP_DIR / "brand"
 
 # Team mailbox (AgentMail). With both set, approved emails are really sent and incoming mail reaches the agent.
 MAIL_INBOX = os.environ.get("AGENTMAIL_INBOX", "")
