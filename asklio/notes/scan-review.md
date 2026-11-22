@@ -91,6 +91,15 @@ Mail to a supplier in a thread of about twelve messages bounces ("line too long"
 - **Statues, lot of 5,600 in Hamburg:** at 05:01 Pune **reconfirmed its deviation request and the sorting criteria** and asked Soony to "proceed with the visual sort under the stated criteria and share the final quantities and cost details". Pune sends nobody to Hamburg. Head of Quality sign-off and the decision on sorting cost and credits "will follow separately". No statues arrive by air on Sunday (Pune, 02:11). Whether the sorted pieces may be packed is for Soony's Supplier Quality and Quality & Compliance.
 - **Art books:** no vehicle left Poznan overnight; Nowak's dispatch and warehouse did not answer its own account manager all night. The transport for PO 4500318782 had already left on 21 Nov, so the books could not be added to it. The matter is with Nowak's morning shift as urgent. Books in Hamburg run out about 12:25; each hour of delay after a 04:30 departure costs about 900 Collector's Editions, and after a 10:00 departure the delivery no longer helps.
 
+## Supplier status, Sun 22 Nov 10:20 CET: closed for the launch
+
+- **Art books: not coming today.** At 10:11 Nowak could not confirm that any vehicle left Poznan. The 8,000 art books and the 4,000 replacement rev C sleeves are now instructed for a joint normal shipment on Monday 23 Nov, DAP Hamburg, with no express surcharge. Loading time, departure and arrival are still to be confirmed by Nowak's carrier. The EUR 15,000 express approval has lapsed.
+- **Game cards:** Boise's 36,000 released (recorded against the PO on 22 Nov 09:14; physical collection by the carrier not yet confirmed), Frankfurt 23 Nov. Hwaseong's 20,000 booked for the 23 Nov flight under AWB 020-48113256, Hamburg 24 Nov; flight number and space not yet confirmed.
+- **Statues:** no delivery. Pune reconfirmed the deviation request and asked Soony to sort; its Quality Head sign-off and cost decision are still pending.
+- **From parts in the building, Sunday ends at about 66,100 of 72,000 Collector's Editions (art books) and 608,000 of 640,000 Standard (game cases), unless Soony collects the cases from the terminal.**
+
+Opened on 22 Nov and still running: Hwaseong's amendment redline (waiver clause refused), Dongguan's ten-day reschedule (objected; three statue lines under review, answer due 24 Nov), PackRight's open sleeve orders (printing paused, sailing of PO 4500318774 on hold, waiting for the rev C artwork from Soony Marketing).
+
 ## Limits
 
 - One model read each scan once. Only the art-book correction was checked by a person against the image.
