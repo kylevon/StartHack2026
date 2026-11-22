@@ -2,7 +2,7 @@
 
 Text-like files (CSV, TSV, Markdown, JSON, logs, anything that decodes) are read
 as text whatever their encoding. Spreadsheets (.xlsx, .xlsm, .xls) are flattened
-to rows. PDFs are read page by page: pages with a text layer as text, scanned
+to rows. Word documents (.docx, .docm) are read as text, tables included. PDFs are read page by page: pages with a text layer as text, scanned
 pages as images. Photos and scans in any common image format are handed over as
 images, downscaled when they are too large for a model to accept.
 
@@ -17,6 +17,7 @@ from pathlib import Path
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp"}
 PASSTHROUGH_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
 SHEET_SUFFIXES = {".xlsx", ".xlsm", ".xls"}
+DOC_SUFFIXES = {".docx", ".docm"}
 ENCODINGS = ("utf-8-sig", "cp1252")  # then latin-1, which never fails
 PAGE_CHARS = 30_000  # text returned per read_file call; longer files continue with `offset`
 SCAN_PAGES = 4  # scanned PDF pages returned as images per call
@@ -70,7 +71,7 @@ def list_files(root: Path, folder: str = "", pattern: str = "*", limit: int = 30
 # ----- turning files into text -----
 def _decode(data: bytes, rel: str) -> str:
     if b"\x00" in data[:4096] and not data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        raise FileError(f"'{rel}' is a binary file of a type read_file cannot open. It opens text, CSV, Excel, PDF and image files.")
+        raise FileError(f"'{rel}' is a binary file of a type read_file cannot open. It opens text, CSV, Excel, Word (.docx), PDF and image files.")
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):  # UTF-16 with a byte-order mark, as Excel's "Unicode text" export writes
         return data.decode("utf-16", errors="replace")
     for encoding in ENCODINGS:
@@ -106,6 +107,56 @@ def _sheet_text(path: Path) -> str:
     return "\n".join(parts)
 
 
+W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _doc_text(path: Path) -> str:
+    """The text of a Word document in reading order: paragraphs as lines, table rows as ' | ' separated cells."""
+    import zipfile
+    from xml.etree import ElementTree
+
+    def paragraph(node) -> str:
+        out = []
+        for el in node.iter():
+            if el.tag == W + "t":
+                out.append(el.text or "")
+            elif el.tag == W + "tab":
+                out.append("\t")
+            elif el.tag in (W + "br", W + "cr"):
+                out.append("\n")
+        return "".join(out).strip()
+
+    def block(parent) -> list[str]:
+        lines = []
+        for child in parent:
+            if child.tag == W + "p":
+                lines.append(paragraph(child))
+            elif child.tag == W + "tbl":
+                for row in child.iter(W + "tr"):
+                    cells = [" ".join(t for t in block(cell) if t) for cell in row.findall(W + "tc")]
+                    lines.append(" | ".join(cells))
+            elif child.tag == W + "sdt":  # content controls wrap ordinary content
+                content = child.find(W + "sdtContent")
+                lines += block(content) if content is not None else []
+        return lines
+
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        parts = ["word/document.xml"] + sorted(n for n in names if n.startswith(("word/footnotes", "word/endnotes")) and n.endswith(".xml"))
+        lines = []
+        for name in parts:
+            root = ElementTree.fromstring(archive.read(name))
+            body = root.find(W + "body")
+            if body is not None:
+                lines += block(body)
+            else:
+                lines += [t for t in (paragraph(n) for n in root.iter(W + "p")) if t]
+    text = "\n".join(lines)
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text.strip()
+
+
 _text_cache: dict[tuple[str, int], str] = {}
 
 
@@ -122,6 +173,8 @@ def searchable_text(path: Path) -> str:
                     text = "\n".join(page.get_text() for page in doc)
             elif suffix in SHEET_SUFFIXES:
                 text = _sheet_text(path)
+            elif suffix in DOC_SUFFIXES:
+                text = _doc_text(path)
             elif suffix in IMAGE_SUFFIXES:
                 text = ""
             else:
@@ -230,6 +283,8 @@ def read(root: Path, rel: str, offset: int = 0):
             return _read_pdf(path, rel, offset)
         if suffix in SHEET_SUFFIXES:
             return _page(_sheet_text(path), offset, rel)
+        if suffix in DOC_SUFFIXES:
+            return _page(_doc_text(path), offset, rel)
     except FileError:
         raise
     except Exception as err:  # damaged or password-protected files, mislabelled extensions
@@ -274,7 +329,7 @@ def preview(root: Path, rel: str) -> dict:
 
             book = load_workbook(path, read_only=True, data_only=True)
             return {"kind": "tables", "tables": [_table(s.title, [list(r) for r in s.iter_rows(values_only=True)]) for s in book.worksheets]}
-        text = _decode(path.read_bytes(), rel)
+        text = _doc_text(path) if suffix in DOC_SUFFIXES else _decode(path.read_bytes(), rel)
         if suffix in {".csv", ".tsv"}:
             try:
                 dialect = csv.Sniffer().sniff(text[:5000], delimiters=",;\t|")

@@ -127,7 +127,7 @@ def make_tools(hub: Hub) -> list:
 
     @tool
     async def read_file(path: str, offset: int = 0):
-        """Read one file of any common type: text, CSV, Excel, PDF, photo or scan. Text comes back as text; scanned PDF pages and images come back as images for you to read. Long files come in parts: `offset` continues where the previous call said to (a character position, or for PDFs a page number)."""
+        """Read one file of any common type: text, CSV, Excel, Word, PDF, photo or scan. Text comes back as text; scanned PDF pages and images come back as images for you to read. Long files come in parts: `offset` continues where the previous call said to (a character position, or for PDFs a page number)."""
         try:
             return await asyncio.to_thread(files.read, root, path, offset)
         except files.FileError as err:

@@ -994,3 +994,25 @@ async def test_connections_list_what_faro_is_plugged_into_and_the_systems_it_fou
         await until(lambda: hub.connections()["documents"]["watching"])
     finally:
         watcher.cancel()
+
+
+def test_word_documents_are_read_searched_and_previewed(tmp_path):
+    import zipfile
+
+    from faro import files
+
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    body = ("<w:p><w:r><w:t>Memo: Launch priorities</w:t></w:r></w:p>"
+            "<w:p><w:r><w:t xml:space=\"preserve\">Collector&apos;s Edition </w:t></w:r><w:r><w:t>first.</w:t></w:r></w:p>"
+            "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Part</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Qty</w:t></w:r></w:p></w:tc></w:tr>"
+            "<w:tr><w:tc><w:p><w:r><w:t>Art book</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>8000</w:t></w:r></w:p></w:tc></w:tr></w:tbl>")
+    with zipfile.ZipFile(tmp_path / "memo.docx", "w") as z:
+        z.writestr("word/document.xml", f"<w:document {w}><w:body>{body}</w:body></w:document>")
+    (tmp_path / "broken.docx").write_bytes(b"not a zip")
+
+    text = files.read(tmp_path, "memo.docx")
+    assert "Memo: Launch priorities\nCollector's Edition first.\nPart | Qty\nArt book | 8000" in text
+    assert "memo.docx" in files.search_files(tmp_path, "edition first") and "broken.docx" not in files.search_files(tmp_path, "edition first")
+    assert files.preview(tmp_path, "memo.docx")["kind"] == "text" and "Art book | 8000" in files.preview(tmp_path, "memo.docx")["text"]
+    with pytest.raises(files.FileError, match="could not be opened"):
+        files.read(tmp_path, "broken.docx")
