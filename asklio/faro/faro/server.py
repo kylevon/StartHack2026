@@ -145,6 +145,14 @@ def create_app(model=None, data_dir=None, state_dir=None, poll_seconds=None, mai
     async def get_outlook():
         return app.state.hub.outlook()
 
+    @app.get("/api/scenarios/{scenario_id}/history")
+    async def scenario_history(scenario_id: str):
+        hub: Hub = app.state.hub
+        scenario = next((s for s in hub.scenarios if s["id"] == scenario_id), None)
+        if scenario is None:
+            raise HTTPException(404, f"No scenario {scenario_id}.")
+        return await mail.scenario_history(hub, scenario)
+
     @app.post("/api/scenarios/{scenario_id}")
     async def settle(scenario_id: str, body: ScenarioIn):
         try:

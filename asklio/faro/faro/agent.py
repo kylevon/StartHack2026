@@ -207,6 +207,7 @@ async def watch_folder(hub: Hub, poll_seconds: float) -> None:
     """Poll the document folder and tell the agent about every new or changed file."""
     known = hub.store.known_files()  # None: this folder has never been looked at
     first = True
+    hub.watching_files = True
     while True:
         current = await asyncio.to_thread(files.snapshot, hub.data_dir)
         if first and known is None and hub.issues:  # a record imported from before the folder was tracked

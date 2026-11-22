@@ -11,7 +11,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import adapters
+from . import adapters, files
 from .store import Store
 
 
@@ -86,7 +86,9 @@ class Hub:
         self.aggressive = self.store.setting("aggressive", False)  # negotiate hard; still only with facts
         self.objectives: list[str] = self.store.setting("objectives", [])  # what the team wants, most important first
         self.suppliers: list[dict] = self.store.setting("suppliers", [])  # the contact list the team and the agent share
-        self.adapters_on: dict = self.store.setting("adapters", {})  # adapter id -> enabled: where approved corrections are posted
+        self.adapters_on: dict = {adapters.RENAMED.get(k, k): v for k, v in self.store.setting("adapters", {}).items()}  # adapter id -> enabled
+        self.watching_files = False  # set by the folder watcher while it runs
+        self.watching_mail = False  # set by the mailbox watcher while it runs
         # The outlook: what could still go wrong, whether or not an issue exists for it yet, and where things end up if nothing changes.
         self.forecasting: bool = self.store.setting("forecasting", False)  # whether the agent looks ahead on its own; each look costs model tokens
         self.scenarios: list[dict] = self.store.setting("scenarios", [])  # {id, issue_id, what, likelihood, why, impact, watch_for, response, status}
@@ -235,7 +237,7 @@ class Hub:
             raise ValueError("This correction is already in the system.")
         adapter = adapters.find(correction["system"], self.adapters_on)
         if adapter is None:
-            raise ValueError(f"No adapter is enabled for {correction['system']}. Turn one on under Settings, Source of truth.")
+            raise ValueError(f"{correction['system']} is not connected. Connect it under Settings, Connections.")
         reference = await adapters.POSTERS[adapter.id](correction)
         how = f"Posted through the {adapter.name} adapter, reference {reference}."
         correction = self.store.mark_applied(correction_id, how)
@@ -310,7 +312,38 @@ class Hub:
     # ----- settings the team controls -----
     def settings(self) -> dict:
         return {"auto": self.auto, "aggressive": self.aggressive, "forecasting": self.forecasting, "objectives": self.objectives, "suppliers": self.suppliers,
+                "connections": self.connections(),
                 "adapters": [{"id": a.id, "name": a.name, "system": a.system, "description": a.description, "simulated": a.simulated, "enabled": bool(self.adapters_on.get(a.id))} for a in adapters.ADAPTERS]}
+
+    def systems(self) -> list[dict]:
+        """The systems of record Faro has come across: every system the agent has proposed a correction for. Nothing here is configured in advance."""
+        found: dict[str, dict] = {}
+
+        def entry(name: str) -> dict:
+            key = " ".join((name or "").split()).lower()
+            if key not in found:
+                adapter = adapters.for_system(name)
+                found[key] = {"name": " ".join(name.split()), "adapter": adapter.id if adapter else None, "enabled": bool(adapter and self.adapters_on.get(adapter.id)),
+                              "corrections": 0, "waiting": 0, "proposed": 0}
+            return found[key]
+
+        for correction in self.store.corrections():
+            if correction["system"].strip():
+                row = entry(correction["system"])
+                row["corrections"] += 1
+                row["waiting"] += correction["applied_at"] is None
+        for approval in self.approvals.values():
+            if approval.tool == "update_record" and approval.status == "pending" and (approval.args.get("system") or "").strip():
+                entry(approval.args["system"])["proposed"] += 1
+        return sorted(found.values(), key=lambda r: r["name"].lower())
+
+    def connections(self) -> dict:
+        """Everything Faro is plugged into, for the settings page."""
+        return {
+            "documents": {"folder": self.data_dir.name, "files": len(files.snapshot(self.data_dir)), "watching": self.watching_files},
+            "mailbox": {"address": self.mailbox.inbox if self.mailbox is not None else "", "sends": "send_email" in self.executors, "reads": self.watching_mail},
+            "systems": self.systems(),
+        }
 
     def directives(self) -> str:
         """The team's standing instructions, as the agent is told them at start and whenever they change."""
@@ -382,6 +415,7 @@ class Hub:
             tell.append("whether you look ahead")
             start_looking = forecasting
         if adapters_on is not None:
+            adapters_on = {adapters.RENAMED.get(k, k): v for k, v in adapters_on.items()}
             merged = self.adapters_on | {k: bool(v) for k, v in adapters_on.items() if any(a.id == k for a in adapters.ADAPTERS)}
             if merged != self.adapters_on:
                 self.adapters_on = merged

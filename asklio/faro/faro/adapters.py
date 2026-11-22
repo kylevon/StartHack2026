@@ -31,10 +31,15 @@ async def post_simulated(correction: dict) -> str:
 
 
 ADAPTERS = [
-    Adapter("soony-sap", "Soony SAP", "SAP",
-            "Posts approved corrections to Soony's SAP: goods receipts, stock quantities, statuses and master data.", simulated=True),
+    Adapter("sap", "SAP", "SAP", "Posts approved corrections to SAP: goods receipts, stock quantities, statuses and master data.", simulated=True),
 ]
-POSTERS = {"soony-sap": post_simulated}
+POSTERS = {"sap": post_simulated}
+RENAMED = {"soony-sap": "sap"}  # ids from when the connector was named after one customer
+
+
+def for_system(system: str) -> Adapter | None:
+    """The connector that can post to a system, whether or not it is switched on."""
+    return next((a for a in ADAPTERS if a.handles(system)), None)
 
 
 def find(system: str, enabled: dict) -> Adapter | None:

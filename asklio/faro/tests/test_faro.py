@@ -727,15 +727,16 @@ async def test_an_enabled_adapter_posts_corrections_and_tracks_them(folder, tmp_
     await hub.decide("A-1", approved=True)
     (waiting,) = hub.store.corrections()
     assert not before.live and waiting["applied_at"] is None  # no adapter: the ledger only
-    with pytest.raises(ValueError, match="No adapter is enabled"):
+    with pytest.raises(ValueError, match="SAP is not connected"):
         await hub.reconcile(waiting["id"])
 
-    assert [a["id"] for a in hub.settings()["adapters"]] == ["soony-sap"] and not hub.settings()["adapters"][0]["enabled"]
-    hub.update_settings(adapters_on={"soony-sap": True, "made-up": True})
-    assert hub.adapters_on == {"soony-sap": True} and "Reconciliation is on for: SAP" in hub.inbox[-1]
+    assert [a["id"] for a in hub.settings()["adapters"]] == ["sap"] and not hub.settings()["adapters"][0]["enabled"]
+    assert hub.systems() == [{"name": "SAP", "adapter": "sap", "enabled": False, "corrections": 1, "waiting": 1, "proposed": 0}]  # found from the correction, not configured
+    hub.update_settings(adapters_on={"soony-sap": True, "made-up": True})  # the id from before the rename still works
+    assert hub.adapters_on == {"sap": True} and "Reconciliation is on for: SAP" in hub.inbox[-1]
 
     posted = await hub.reconcile(waiting["id"])  # the reviewer reconciles the one that was waiting
-    assert posted["applied_at"] and "Posted through the Soony SAP adapter, reference REC-" in posted["applied_note"]
+    assert posted["applied_at"] and "Posted through the SAP adapter, reference REC-" in posted["applied_note"]
     assert issue.history[-1]["kind"] == "reconciled"
     with pytest.raises(ValueError, match="already in the system"):
         await hub.reconcile(waiting["id"])
@@ -901,3 +902,95 @@ async def test_a_scenario_is_prevented_with_a_measure_proposed_now(folder, tmp_p
     assert "already settled" in await tools["send_email"].ainvoke(reminder | {"scenario_id": "S-2"})  # nothing left to prevent
     again = Hub(folder, tmp_path / "state")
     assert again.approvals["A-2"].scenario_id == "S-2" and again.scenarios[0]["prevention"].startswith("Remind")
+
+
+async def test_history_also_shows_newer_unfiled_mail_with_the_same_people(folder, tmp_path):
+    import httpx
+
+    from faro import mail
+
+    def msg(mid, thread, direction, when, text, other="a.nowak@supplier.example"):
+        me = "Team <team@agentmail.to>"
+        return {"message_id": mid, "thread_id": thread, "labels": [direction], "timestamp": when, "text": text,
+                "from": me if direction == "sent" else f"A. Nowak <{other}>", "to": [other] if direction == "sent" else ["team@agentmail.to"]}
+
+    threads = {
+        "t1": [msg("<1>", "t1", "sent", "2099-01-01T16:35:00Z", "How many?"), msg("<2>", "t1", "received", "2099-01-01T16:39:00Z", "8000.")],
+        "t2": [msg("<3>", "t2", "sent", "2099-01-02T05:00:00Z", "Status at 05:00?"), msg("<4>", "t2", "received", "2099-01-02T06:41:00Z", "No vehicle yet.")],
+        "t3": [msg("<5>", "t3", "received", "2099-01-02T07:00:00Z", "Unrelated offer.", other="sales@someone-else.example")],
+        "t0": [msg("<0>", "t0", "sent", "2000-01-01T00:00:00Z", "Long before this issue.")],
+    }
+
+    def handle(request):
+        path = request.url.path
+        if path.endswith("/threads"):
+            return httpx.Response(200, json={"threads": [{"thread_id": k, "timestamp": v[-1]["timestamp"], "senders": [m["from"] for m in v], "recipients": [r for m in v for r in m["to"]]} for k, v in threads.items()]})
+        thread_id = path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json={"thread_id": thread_id, "subject": thread_id, "messages": threads[thread_id]})
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "k", httpx.AsyncClient(transport=httpx.MockTransport(handle)))
+    issue = hub.open_issue("Art books short", "blocker", "s", [])
+    hub.update_issue("I-1", "Linked.", thread_id="t1")
+    result = await mail.issue_history(hub, issue)
+    mails = [(e["message_id"], e.get("unfiled", False)) for e in result["entries"] if e["kind"].startswith("mail_")]
+    assert mails == [("<1>", False), ("<2>", False), ("<3>", True), ("<4>", True)]  # the newer thread with the same person is shown as unfiled; strangers and old mail are not
+    other = hub.open_issue("No mail on this one", "info", "s", [])
+    assert not any(e["kind"].startswith("mail_") for e in (await mail.issue_history(hub, other))["entries"])  # an issue with no conversation gathers none
+
+
+async def test_a_scenario_has_its_own_history_with_its_measure_and_the_mail_that_followed(folder, tmp_path):
+    import httpx
+
+    from faro import mail
+
+    thread = [
+        {"message_id": "<out>", "thread_id": "t9", "labels": ["sent"], "from": "Team <team@agentmail.to>", "to": ["a@supplier.example"], "timestamp": "2099-01-01T10:00:00Z", "text": "Reminder: the truck leaves by 04:00."},
+        {"message_id": "<in>", "thread_id": "t9", "labels": ["received"], "from": "A <a@supplier.example>", "to": ["team@agentmail.to"], "timestamp": "2099-01-01T10:20:00Z", "text": "Confirmed, it leaves at 03:30."},
+    ]
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"thread_id": "t9", "subject": "Truck", "messages": thread})))
+
+    async def send(approval):
+        approval.thread_id = "t9"
+        return "Sent."
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "k", client)
+    hub.executors["send_email"] = send
+    scenario = hub.anticipate("The truck leaves too late.", "high", "No truck confirmed.", "900 copies an hour.", "No departure time by 03:00.", "Book our own carrier.", prevention="Remind the supplier.")
+    assert [e["kind"] for e in (await mail.scenario_history(hub, scenario))["entries"]] == ["anticipated"]
+
+    hub.propose("send_email", {"to": ["a@supplier.example"]}, "", "Remind the supplier of the 04:00 departure", "r", needs_human=False, scenario_id="S-1")
+    hub.propose("send_email", {"to": ["a@supplier.example"]}, "", "A second, harder reminder", "r", scenario_id="S-1")
+    await hub.decide("A-1", approved=True, note="go")
+    await hub.decide("A-2", approved=False)
+    hub.settle_scenario("S-1", happened=False, note="The truck left at 03:30.")
+    result = await mail.scenario_history(hub, scenario)
+    kinds = [e["kind"] for e in result["entries"]]
+    assert kinds == ["anticipated", "proposed", "proposed", "sent", "rejected", "scenario_passed", "mail_sent", "mail_received"] and result["problem"] == ""
+    assert "Note: go" in result["entries"][3]["text"] and result["entries"][-1]["text"] == "Confirmed, it leaves at 03:30."
+    json.dumps(result)
+
+
+async def test_connections_list_what_faro_is_plugged_into_and_the_systems_it_found(folder, tmp_path):
+    hub = Hub(folder, tmp_path / "state")
+    first = hub.connections()
+    assert first["systems"] == [] and first["documents"] == {"folder": folder.name, "files": 2, "watching": False} and first["mailbox"]["address"] == ""
+
+    issue = hub.open_issue("Stock wrong", "risk", "s", [])
+    change = [{"field": "qty", "old_value": "80000", "new_value": "8000"}]
+    hub.propose("update_record", {"system": "SAP", "record": "GR 1", "changes": change}, issue.id, "Correct SAP", "r")
+    hub.propose("update_record", {"system": "Shipment tracker", "record": "SHP 1", "changes": change}, issue.id, "Correct the tracker", "r")
+    await hub.decide("A-1", approved=True)
+    systems = {s["name"]: s for s in hub.connections()["systems"]}
+    assert systems["SAP"] == {"name": "SAP", "adapter": "sap", "enabled": False, "corrections": 1, "waiting": 1, "proposed": 0}
+    assert systems["Shipment tracker"] == {"name": "Shipment tracker", "adapter": None, "enabled": False, "corrections": 0, "waiting": 0, "proposed": 1}  # found, but nothing can post to it yet
+
+    hub.update_settings(adapters_on={"sap": True})
+    await hub.reconcile(hub.store.corrections()[0]["id"])
+    assert {s["name"]: (s["enabled"], s["waiting"]) for s in hub.connections()["systems"]}["SAP"] == (True, 0)
+    watcher = asyncio.create_task(watch_folder(hub, 0.05))
+    try:
+        await until(lambda: hub.connections()["documents"]["watching"])
+    finally:
+        watcher.cancel()

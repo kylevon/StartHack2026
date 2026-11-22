@@ -58,6 +58,9 @@ a{color:var(--accent)}
 .set-pane{overflow:auto;padding:22px 26px 28px;display:flex;flex-direction:column;gap:18px;min-width:0}
 .set-pane h3{font-size:19px;font-weight:700;letter-spacing:-.015em}
 .set-pane .lead{font-size:14px;color:var(--muted);margin-top:4px;max-width:60ch}
+.set-pane h4{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 2px}
+.conn-state{flex:none;margin-left:auto;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;padding-top:3px}
+.conn-state.on{color:var(--ok)}
 .set-row{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:16px 0;border-top:1px solid var(--hair)}
 .set-row:first-of-type{border-top:0;padding-top:4px}
 .set-row b{font-size:15px;font-weight:600}
@@ -313,7 +316,7 @@ const sheetOpen = new Map();    // file path -> sheet index
 const expanded = new Set();     // history entries the reader opened in full
 let shownPlace = '';
 let outlook = { scenarios: [], forecast: {} }, outlookStamp = 0;   // what could still go wrong, and where things end up if nothing changes
-let lookSel = null;   // which scenario is open in the centre
+let lookSel = null, lookTab = 'decision';   // which scenario is open in the centre, and which of its two tabs
 let settings = { auto: false, aggressive: false, forecasting: false, objectives: [], suppliers: [], adapters: [] };   // what the team controls
 let settingsOpen = false, settingsTab = 'objectives', autoAsk = false;
 let historyData = null;         // { id, entries, problem } for the issue on screen
@@ -447,7 +450,7 @@ const ICON = {
   stack: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><ellipse cx="10" cy="5" rx="6.5" ry="2.5"/><path d="M3.5 5v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5V5M3.5 10v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-5"/></svg>',
   bolt: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 2.5L4.5 11.2h4.4L8 17.5l7-9h-4.5z"/></svg>',
 };
-const TABS = [['objectives', 'Objectives', 'target'], ['suppliers', 'Suppliers', 'people'], ['truth', 'Source of truth', 'stack'], ['automation', 'Automation', 'bolt']];
+const TABS = [['objectives', 'Objectives', 'target'], ['suppliers', 'Suppliers', 'people'], ['connections', 'Connections', 'stack'], ['automation', 'Automation', 'bolt']];
 const adapterFor = (system) => (settings.adapters || []).find((a) => a.enabled && String(system || '').toLowerCase().includes(a.system.toLowerCase()));
 
 function renderAuto() {   // the settings button at the bottom of the left column
@@ -472,11 +475,17 @@ function settingsPane() {
         : '<p class="cap">No suppliers yet. The agent adds them as it reads the documents.</p>') +
       '<div><button class="btn" id="sup-add">Add a supplier</button></div>';
   }
-  if (settingsTab === 'truth') {
-    return '<div><h3>Source of truth</h3><p class="lead">Connect the system that holds your records. With a connection on, a correction you approve is posted to that system, and each posting is tracked in the issue\u2019s history. Without one, corrections stay in Faro\u2019s ledger until someone enters them by hand.</p></div><div>' +
-      (settings.adapters || []).map((a) => '<div class="set-row"><div><b>' + esc(a.name) + '</b><p>' + esc(a.description) + '</p></div>' +
-        '<button class="switch" data-adapter="' + esc(a.id) + '" role="switch" aria-checked="' + a.enabled + '" aria-label="' + esc(a.name) + '"></button></div>').join('') +
-      '</div><p class="cap">More systems can be added as adapters. This is the only one so far.</p>';
+  if (settingsTab === 'connections') {
+    const c = settings.connections || { documents: {}, mailbox: {}, systems: [] };
+    const state = (on, yes, no) => '<span class="conn-state' + (on ? ' on' : '') + '">' + (on ? yes : no) + '</span>';
+    const d = c.documents, m = c.mailbox;
+    const row = (name, purpose, on, control) => '<div class="set-row"><div><b>' + esc(name) + '</b><p>' + purpose + '</p></div>' + state(on, 'Connected', 'Disconnected') + (control || '') + '</div>';
+    return '<div><h3>Connections</h3><p class="lead">What Faro reads, and where it posts.</p></div>' +
+      '<div><h4>Documents</h4>' + row(d.folder || 'No folder', 'The files Faro reads to find problems. It never changes them.', !!d.folder) + '</div>' +
+      '<div><h4>Mailbox</h4>' + row(m.address || 'No mailbox', 'Where approved emails are sent from and replies arrive.', !!(m.address && m.sends)) + '</div>' +
+      '<div><h4>Systems of record</h4>' + (c.systems.length ? c.systems.map((x) => row(x.name, x.adapter ? 'Corrections you approve are posted here.' : 'No connector yet. Corrections are kept for someone to enter by hand.', x.enabled,
+          x.adapter ? '<button class="switch" data-adapter="' + esc(x.adapter) + '" role="switch" aria-checked="' + x.enabled + '" aria-label="Connect ' + esc(x.name) + '"></button>' : '')).join('')
+        : '<p class="cap">None found yet. Faro lists a system once it finds one in your documents.</p>') + '</div>';
   }
   return '<div><h3>Automation</h3><p class="lead">How much the agent does on its own, and how it deals with suppliers.</p></div><div>' +
     '<div class="set-row"><div><b>Auto mode</b><p>' + (autoAsk ? 'Emails and actions the agent marks as routine will go out without you reading them first. Anything that commits money or places an order still waits for you.'
@@ -525,6 +534,11 @@ function actionView(a) {
 function lookView() {
   const x = outlook.scenarios.find((y) => y.id === lookSel);
   if (!x) return '<div class="detail empty"><div><h1>Nothing selected</h1></div></div>';
+  if (lookTab === 'history') {
+    return '<div class="detail"><header><div class="sevline sev-info">Could go wrong · ' + x.id + ' · ' + LIKELY[x.likelihood][0] + '</div><h1>' + esc(bare(x.what)) + '</h1>' +
+      '<p class="cap" style="margin-top:8px">What was done to prevent this, newest first: the measure, your decision and the emails that followed. Emails are read from the team mailbox.</p></header>' +
+      '<section>' + timeline(x.id) + '</section></div>';
+  }
   const issue = issues.get(x.issue_id), open = x.status === 'watching';
   return '<div class="detail"><header><div class="sevline sev-info">Could go wrong · ' + x.id + ' · ' + LIKELY[x.likelihood][0] + '</div><h1>' + esc(bare(x.what)) + '</h1>' +
     '<p class="cap" style="margin-top:8px">This has not happened. The aim is that it never does.</p></header>' +
@@ -583,7 +597,7 @@ function decisionView(issue) {
         (c.applied_at ? '<span class="cap" title="' + esc(c.applied_note || '') + '">' + (/adapter/.test(c.applied_note || '') ? 'Posted to ' : 'Changed in ') + esc(c.system) + ' ' + esc(stamp(c.applied_at)) + '</span>'
           : adapterFor(c.system) ? '<button class="btn btn-primary" style="padding:5px 12px;font-size:12.5px" data-reconcile="' + c.id + '">Reconcile with ' + esc(c.system) + '</button>'
           : '<button class="btn" style="padding:5px 12px;font-size:12.5px" data-applied="' + c.id + '">Mark as changed in ' + esc(c.system) + '</button>') + '</td></tr>').join('') +
-      '</tbody></table></div><p class="cap" style="margin-top:10px">Faro and the agent treat the corrected value as the truth from the moment you approve it. ' + (issue.corrections.some((c) => adapterFor(c.system)) ? 'With the connection on, reconciling posts it to the system and records that in History.' : 'The system itself only changes when someone enters it there, or when you connect it under Settings, Source of truth.') + '</p></section>' : '') +
+      '</tbody></table></div><p class="cap" style="margin-top:10px">Faro and the agent treat the corrected value as the truth from the moment you approve it. ' + (issue.corrections.some((c) => adapterFor(c.system)) ? 'With the connection on, reconciling posts it to the system and records that in History.' : 'The system itself only changes when someone enters it there, or when you connect it under Settings, Connections.') + '</p></section>' : '') +
     (issue.evidence.length ? '<section><h2>Evidence</h2><div class="tiles">' + issue.evidence.map((p) => '<button class="tile ' + (p === open ? 'on' : '') + '" data-evidence="' + esc(p) + '" title="' + esc(p) + '"><i>' + esc((p.split('.').pop() || 'file').slice(0, 4)) + '</i><span>' + esc(base(p)) + '</span></button>').join('') + '</div>' +
       '<div class="viewer" id="viewer"><p class="cap">Opening…</p></div></section>' : '') +
     '</div>';
@@ -632,10 +646,10 @@ const WHAT = {
   approved: ['You', 'approved', 'you'], rejected: ['You', 'rejected', 'you'], sent: ['You', 'approved and sent', 'you'], failed: ['You', 'approved, sending failed', 'you'],
   mail_sent: ['Email sent', '', 'out'], mail_received: ['Email received', '', 'in'],
 };
-function historyView(issue) {
-  let body;
-  if (!historyData || historyData.id !== issue.id) body = '<p class="cap">Reading the history and the mailbox…</p>';
-  else body = (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
+// The timeline itself: the same for an issue and for something that could go wrong.
+function timeline(id) {
+  if (!historyData || historyData.id !== id) return '<p class="cap">Reading the history and the mailbox…</p>';
+  return (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
     '<div class="timeline">' + [...historyData.entries].reverse().map((e) => {
       const [who, did, tone] = WHAT[e.kind] || ['', e.kind, 'agent'];
       const mail = e.kind.startsWith('mail_');
@@ -648,38 +662,46 @@ function historyView(issue) {
         ? letter(e.kind === 'mail_sent' ? 'To ' + esc(people(e.to).join(', ')) : 'From ' + esc(person(e.from)), e.subject, e.text, e.english, e.language, e.message_id, e.direction) +
           (e.translation_error ? '<p class="cap">Not translated: ' + esc(e.translation_error) + '</p>' : '')
         : '<div class="tl-full rich">' + rich(e.text) + '</div>';
-      const rest = mail ? (e.kind === 'mail_sent' ? 'to ' + esc(people(e.to).join(', ')) : 'from ' + esc(person(e.from))) : esc(did) + (e.ref ? ' · ' + esc(e.ref) : '');
+      const rest = mail ? (e.kind === 'mail_sent' ? 'to ' + esc(people(e.to).join(', ')) : 'from ' + esc(person(e.from))) + (e.unfiled ? ' · not filed by the agent yet' : '') : esc(did) + (e.ref ? ' · ' + esc(e.ref) : '');
       const line = '<span class="tl-sum">' + mdi(short) + '</span>' + (more ? '<span class="chev' + (open ? ' up' : '') + '" aria-hidden="true">›</span>' : '');
       return '<div class="tl"><div class="tl-head"><span><span class="badge b-' + tone + '">' + who + '</span><span class="tl-did">' + rest + '</span></span><time>' + esc(stamp(e.ts)) + '</time></div>' +
         (more ? '<button class="tl-line" data-expand="' + esc(key) + '" aria-expanded="' + open + '" title="' + (open ? 'Show less' : 'Show all') + '">' + line + '</button>' : '<div class="tl-line">' + line + '</div>') + full + '</div>';
     }).join('') + '</div>';
+}
+function historyView(issue) {
+  const body = timeline(issue.id);
   return '<div class="detail"><header><div class="sevline sev-' + esc(issue.severity) + '">' + esc(issue.severity) + ' · ' + issue.id + '</div><h1>' + esc(bare(issue.title)) + '</h1>' +
     '<p class="cap" style="margin-top:8px">Everything that happened on this issue, newest first, each as one line. Open an entry to read it in full. Emails are read from the team mailbox.</p></header>' +
     '<form class="logform" data-log="' + issue.id + '"><input class="note-in" id="log-' + issue.id + '" type="text" placeholder="Add something that happened outside Faro: a call, a meeting, a decision" aria-label="Add to the history" autocomplete="off"><button class="btn" type="submit">Add</button></form>' +
     '<section>' + body + '</section></div>';
 }
 async function loadHistory() {
-  const id = selected;
+  const look = view === 'look';
+  const id = look ? lookSel : selected;
   if (!id) return;
   let data;
   try {
-    const res = await fetch('/api/issues/' + q(id) + '/history');
+    const res = await fetch((look ? '/api/scenarios/' : '/api/issues/') + q(id) + '/history');
     data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'status ' + res.status);
   } catch (err) { data = { entries: (issues.get(id) || { history: [] }).history, problem: 'The history could not be read: ' + err.message }; }
-  if (id !== selected) return;
+  if (id !== (view === 'look' ? lookSel : selected)) return;
   historyData = { id, ...data };
-  if (view === 'history') renderCenter(true);
+  if (view === 'history' || (view === 'look' && lookTab === 'history')) renderCenter(true);
 }
 
 /* ---------- rendering ---------- */
 function renderCenter(force) {
   if (view === 'look') {
-    const key = 'look' + lookSel + outlookStamp + [...approvals.values()].filter((a) => a.scenario_id).map((a) => a.status + a.outcome).join();
-    $('viewbar').hidden = true;
+    const mine = [...approvals.values()].filter((a) => a.scenario_id === lookSel);
+    const key = 'look' + lookSel + lookTab + outlookStamp + [...approvals.values()].filter((a) => a.scenario_id).map((a) => a.status + a.outcome).join();
+    $('viewbar').hidden = false;
+    $('tab-decision').className = lookTab === 'decision' ? 'on' : '';
+    $('tab-history').className = lookTab === 'history' ? 'on' : '';
+    $('hist-count').textContent = historyData && historyData.id === lookSel ? historyData.entries.length : 1 + mine.length + mine.filter((a) => a.status !== 'pending').length;
     if (!force && key === shownKey) return;
-    const keep = shownPlace === 'look' + lookSel ? $('center').scrollTop : 0;
-    shownKey = key; shownPlace = 'look' + lookSel;
+    const keep = shownPlace === 'look' + lookSel + lookTab ? $('center').scrollTop : 0;
+    shownKey = key; shownPlace = 'look' + lookSel + lookTab;
     $('view').innerHTML = lookView();
     $('center').scrollTop = keep;
     return;
@@ -763,7 +785,7 @@ function apply(e) {
   } else if (e.kind === 'approval') {
     const a = e.approval, before = approvals.get(a.id);
     approvals.set(a.id, a);
-    if (a.issue_id === selected && live) historyChanged();
+    if ((a.issue_id === selected || (view === 'look' && a.scenario_id === lookSel)) && live) historyChanged();
     if (!before && a.status === 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: 'Asked', label: a.headline, text: 'Asked for approval ' + a.id + ': ' + kind(a), open: a.issue_id });
     else if (before && before.status === 'pending' && a.status !== 'pending') feed.push({ kind: 'chip', ts: e.ts, verb: a.status === 'withdrawn' ? 'Withdrew' : (a.auto ? 'Auto ' : '') + (a.outcome === 'done' ? (a.auto ? 'sent' : 'Sent') : a.outcome === 'failed' ? (a.auto ? 'failed' : 'Failed') : a.status === 'approved' ? (a.auto ? 'approved' : 'Approved') : 'Rejected'), label: a.headline, text: a.id + ' ' + a.status + (a.note ? ': ' + a.note : ''), open: a.issue_id, history: true, tone: a.status === 'approved' && a.outcome !== 'failed' ? 'good' : 'bad' });
   }
@@ -806,21 +828,26 @@ document.addEventListener('click', (e) => {
     if ((el = t('[data-auto]'))) { autoAsk = false; if (el.dataset.auto === '1') save({ auto: true }); else renderSettings(); return; }
     if (t('#sw-aggr')) { save({ aggressive: !settings.aggressive }); return; }
     if (t('#sw-forecast')) { save({ forecasting: !settings.forecasting }); return; }
-    if ((el = t('[data-adapter]'))) { const on = el.getAttribute('aria-checked') !== 'true'; settings.adapters = settings.adapters.map((a) => a.id === el.dataset.adapter ? { ...a, enabled: on } : a); renderAuto(); renderSettings(); post('/api/settings', { adapters: { [el.dataset.adapter]: on } }); return; }
+    if ((el = t('[data-adapter]'))) {
+      const on = el.getAttribute('aria-checked') !== 'true', id = el.dataset.adapter;
+      settings.adapters = (settings.adapters || []).map((a) => a.id === id ? { ...a, enabled: on } : a);
+      if (settings.connections) settings.connections.systems = settings.connections.systems.map((x) => x.adapter === id ? { ...x, enabled: on } : x);
+      renderAuto(); renderSettings(); post('/api/settings', { adapters: { [id]: on } }); return;
+    }
     if ((el = t('[data-obj-move]'))) { const i = Number(el.dataset.objMove), j = i + Number(el.dataset.by), list = [...settings.objectives]; [list[i], list[j]] = [list[j], list[i]]; save({ objectives: list }); return; }
     if ((el = t('[data-obj-del]'))) { save({ objectives: settings.objectives.filter((_, i) => i !== Number(el.dataset.objDel)) }); return; }
     if ((el = t('[data-sup-del]'))) { save({ suppliers: settings.suppliers.filter((_, i) => i !== Number(el.dataset.supDel)) }); return; }
     if (t('#sup-add')) { settings.suppliers = [...settings.suppliers, { name: '', contact: '', email: '', language: '', notes: '', by_team: true }]; renderSettings(); const added = document.querySelector('[data-sup="' + (settings.suppliers.length - 1) + '"][data-field="name"]'); if (added) added.focus(); return; }
     return;   // nothing behind the overlay reacts while it is open
   }
-  if ((el = t('[data-view]'))) { show(el.dataset.view); return; }
-  if ((el = t('[data-open]')) && issues.has(el.dataset.open)) { selected = el.dataset.open; historyData = null; show(el.dataset.history ? 'history' : 'decision'); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
+  if ((el = t('[data-view]'))) { if (view === 'look') { lookTab = el.dataset.view; renderCenter(true); loadHistory(); return; } show(el.dataset.view); return; }
+  if ((el = t('[data-open]')) && issues.has(el.dataset.open)) { const wasHistory = view === 'history' || (view === 'look' && lookTab === 'history'); selected = el.dataset.open; historyData = null; show(el.dataset.history || wasHistory ? 'history' : 'decision'); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
   if ((el = t('[data-evidence]'))) { evidenceOpen.set(selected, el.dataset.evidence); document.querySelectorAll('.tile').forEach((x) => x.classList.toggle('on', x === el)); $('viewer').innerHTML = '<p class="cap">Opening…</p>'; loadEvidence(el.dataset.evidence); return; }
   if ((el = t('[data-sheet]'))) { sheetOpen.set(el.dataset.path, Number(el.dataset.sheet)); loadEvidence(el.dataset.path); return; }
   if ((el = t('[data-expand]'))) { const k = el.dataset.expand; if (expanded.has(k)) expanded.delete(k); else expanded.add(k); renderCenter(true); return; }
   if ((el = t('[data-msg]'))) { msgLang.set(el.dataset.msg, el.dataset.to); renderCenter(true); return; }
   if ((el = t('[data-fold]'))) { fold(el.dataset.fold); return; }
-  if ((el = t('[data-look]'))) { lookSel = el.dataset.look; view = 'look'; renderLeft(); renderCenter(true); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
+  if ((el = t('[data-look]'))) { if (view !== 'look' && view === 'history') lookTab = 'history'; lookSel = el.dataset.look; view = 'look'; historyData = null; renderLeft(); renderCenter(true); loadHistory(); if (matchMedia('(max-width:760px)').matches) $('center').scrollIntoView(); return; }
   if ((el = t('[data-settle]'))) { el.disabled = true; post('/api/scenarios/' + el.dataset.settle, { happened: el.dataset.happened === '1' }); return; }
   if ((el = t('[data-done]'))) { el.disabled = true; post('/api/issues/' + el.dataset.done + '/done', {}); return; }
   if ((el = t('[data-reconcile]'))) { el.disabled = true; post('/api/corrections/' + el.dataset.reconcile + '/reconcile', {}); return; }

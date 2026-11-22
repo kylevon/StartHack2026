@@ -250,10 +250,19 @@ def emphasizer(model, cache):
     return emphasize
 
 
+MORE_THREADS = 6  # how many unfiled conversations with the same people an issue's history shows
+
+
+def _addresses(*fields: str) -> set[str]:
+    """The email addresses in 'Name <a@b>' or bare form, lower-cased."""
+    return {a.lower() for f in fields for a in re.findall(r"[^\s<>,;]+@[^\s<>,;]+", f or "")}
+
+
 async def issue_history(hub: Hub, issue) -> dict:
     """One timeline for an issue: what Faro recorded, merged with the emails of its conversations as the mailbox has them now."""
     entries = [dict(entry) for entry in issue.history]
     problem = ""
+    people: set[str] = set()  # the outside addresses this issue's conversations are with
 
     async def shorten(entry: dict) -> None:
         entry["summary"] = ""
@@ -274,6 +283,51 @@ async def issue_history(hub: Hub, issue) -> dict:
             for m in view["messages"]:
                 # the message's own "ts" is an ISO string; the timeline sorts on seconds, so ours must win
                 entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"]})
+                people.update(_addresses(m["from"], *m["to"]) - {hub.mailbox.inbox.lower()})
+        # Mail keeps flowing while the agent is not there to file it. A newer conversation with the same people most likely belongs
+        # here too, so it is shown, marked as not yet filed, until the agent links it or files it elsewhere.
+        if people:
+            try:
+                others = [t for t in await hub.mailbox.threads() if t.get("thread_id") not in issue.thread_ids
+                          and epoch(t.get("timestamp") or "") > issue.created
+                          and _addresses(*(t.get("senders") or []), *(t.get("recipients") or [])) & people]
+            except Exception as err:
+                problem, others = f"The mailbox could not be read: {err or type(err).__name__}", []
+            for t in sorted(others, key=lambda t: t.get("timestamp") or "", reverse=True)[:MORE_THREADS]:
+                try:
+                    view = await thread_view(hub, hub.mailbox, t["thread_id"])
+                except Exception:
+                    continue
+                for m in view["messages"]:
+                    entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"], "unfiled": True})
+    return {"entries": sorted(entries, key=lambda e: e["ts"]), "problem": problem}
+
+
+async def scenario_history(hub: Hub, scenario: dict) -> dict:
+    """One timeline for something that could go wrong: when it was anticipated, each measure proposed against it and what was decided,
+    and the mail those measures started or continued, read from the mailbox now."""
+    entries = [{"ts": scenario["created"], "kind": "anticipated", "text": f"{scenario['what']} {scenario['impact']}", "ref": scenario["id"]}]
+    problem, threads = "", []
+    for a in (a for a in hub.approvals.values() if a.scenario_id == scenario["id"]):
+        entries.append({"ts": a.created, "kind": "proposed", "text": a.headline, "ref": a.id})
+        if a.status != "pending" and a.decided:
+            kind = ("withdrawn" if a.status == "withdrawn" else "rejected" if a.status == "rejected" else "failed" if a.outcome == "failed"
+                    else ("auto_sent" if a.auto else "sent") if a.outcome == "done" else ("auto_approved" if a.auto else "approved"))
+            entries.append({"ts": a.decided, "kind": kind, "text": a.headline + (f". Note: {a.note}" if a.note else "") + (f" {a.result}" if kind == "failed" else ""), "ref": a.id})
+        if a.thread_id and a.thread_id not in threads:
+            threads.append(a.thread_id)
+    if scenario["status"] != "watching" and scenario.get("settled"):
+        entries.append({"ts": scenario["settled"], "kind": "scenario_" + scenario["status"], "text": scenario["what"] + (f" {scenario['note']}" if scenario.get("note") else ""), "ref": scenario["id"]})
+    for thread_id in threads if hub.mailbox is not None else []:
+        try:
+            view = await thread_view(hub, hub.mailbox, thread_id)
+        except Exception as err:
+            problem = f"The mailbox could not be read: {err or type(err).__name__}"
+            continue
+        for m in view["messages"]:
+            entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"]})
+    for entry in entries:
+        entry.setdefault("summary", "")
     return {"entries": sorted(entries, key=lambda e: e["ts"]), "problem": problem}
 
 
@@ -306,6 +360,7 @@ async def watch_mail(hub: Hub, mailbox: Mailbox, poll_seconds: float) -> None:
     """Poll the inbox and tell the agent about every new incoming message."""
     seen = hub.store.seen_mail()  # None: this mailbox has never been looked at
     first = True
+    hub.watching_mail = True
     failures = 0
     while True:
         try:

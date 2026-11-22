@@ -68,11 +68,13 @@ Issues describe what is wrong now. Scenarios are what could still go wrong, whet
 - **Simulation.** `simulate_run` is a calculator, not a guess: given units needed, the line's rate, the hours left, and for each part the stock and expected arrivals, it works out how many units get made and which part stops the line when. The agent runs it for the plan as it stands and for each likely failure.
 - **Scenarios.** Each has a likelihood (the agent's estimate), a reason, a cost, a preventive measure, the sign that it is happening anyway and a fallback. The agent acts on the preventive measure at once: where the person who can stop it has an email address, it proposes a reminder or a request to confirm, attached to the scenario; where they have none, the measure tells the team whom to call. The team can drop a scenario that is no longer a risk. If it happens anyway, the agent settles it and proposes its fallback.
 
-## Source of truth adapters
+## Connections
 
-Under Settings, Source of truth, the team can connect the system that holds its records (`adapters.py`). With an adapter on, an approved correction is posted to that system at once, corrections already in the ledger can be reconciled with one click, and each posting is tracked in the issue's history with a reference.
+Settings, Connections shows what Faro is plugged into: the document folder (read only), the mailbox (sends approved emails, reads replies), and the systems of record.
 
-The only adapter, Soony SAP, is a stand-in: it accepts the posting and returns a reference, but no SAP is behind it. The interface does not say this, so say it when you demo it.
+Systems of record are not configured. Faro lists every system the agent has proposed a correction for, taken from the customer's own documents, with its count of corrections. Where a connector exists for a system (`adapters.py`), the team can switch it on: an approved correction is then posted at once, ledger rows can be reconciled with one click, and each posting is tracked in the issue's history with a reference. A system with no connector is still listed; its corrections stay in the ledger for someone to enter by hand.
+
+The only connector, SAP, is a stand-in: it accepts the posting and returns a reference, but no SAP is behind it. The interface does not say this, so say it when you demo it.
 
 ## Not done yet
 
