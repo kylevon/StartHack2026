@@ -63,7 +63,7 @@ class Hub:
         self.events: list[dict] = []
         self.approvals: dict[str, Approval] = {}
         self.issues: dict[str, Issue] = {}
-        self.auto = False  # auto mode: carry out proposals the agent marked as not needing a person
+        self.auto = False  # auto mode: carry out every proposal at once, without a person deciding
         self._auto_tasks: set = set()
         self.inbox: list[str] = []
         self.wake = asyncio.Event()
@@ -366,10 +366,16 @@ class Hub:
                 "contract renewal. Be cold and direct. Do not insult or demean anyone, and threaten commercial consequences only. "
                 "What never changes is the truth about facts. State nothing as a fact that the documents or the mailbox do not support: never invent a competing "
                 "offer, a price, a stock figure, a deadline or a decision already taken, and never deny or rewrite what was said before. A threat says what the "
-                "team will do; it does not make up what has happened. Every email written this way needs a person, so mark it needs_human."
+                "team will do; it does not make up what has happened. Mark every email written this way needs_human."
             )
         else:
             parts.append("Aggressive mode is off. Be firm and courteous with suppliers.")
+        if self.auto:
+            parts.append("Auto mode is on. Everything you propose is carried out the moment you propose it, with no person reading it first, including what you "
+                         "mark needs_human" + (" and the hard emails of aggressive mode" if self.aggressive else "") + ". The team has accepted that. So propose only "
+                         "what you would stand behind going out right now, check every fact in it first, and do not propose the same action twice.")
+        else:
+            parts.append("Auto mode is off. Everything you propose waits for a person to approve it.")
         if self.suppliers:
             parts.append("The supplier list (the team may have corrected it; where it differs from the documents, the list is right):\n" + "\n".join(
                 f"  {s.get('name', '?')} | contact {s.get('contact') or '-'} | {s.get('email') or 'no address'} | writes {s.get('language') or '?'}" + (f" | note: {s['notes']}" if s.get("notes") else "")
@@ -392,6 +398,7 @@ class Hub:
         tell = []
         if auto is not None and auto != self.auto:
             self.auto = auto
+            tell.append("auto mode")
             self.store.set_setting("auto", auto)
         if aggressive is not None and aggressive != self.aggressive:
             self.aggressive = aggressive
@@ -430,11 +437,12 @@ class Hub:
         return self.settings()
 
     def _run_auto(self) -> None:
-        """In auto mode, carry out every waiting proposal the agent itself marked as not needing a person."""
+        """In auto mode, carry out every waiting proposal. The team accepted that when it switched auto mode on, including for
+        proposals the agent marked as needing a person and for emails written in aggressive mode."""
         if not self.auto:
             return
         for approval in list(self.approvals.values()):
-            if approval.status == "pending" and not approval.needs_human and approval.id not in {t.get_name() for t in self._auto_tasks}:
+            if approval.status == "pending" and approval.id not in {t.get_name() for t in self._auto_tasks}:
                 task = asyncio.ensure_future(self.decide(approval.id, True, auto=True))
                 task.set_name(approval.id)
                 self._auto_tasks.add(task)

@@ -1,0 +1,39 @@
+# Publishes the pitch deck, and only the deck, to GitHub Pages:
+# https://kylevon.github.io/StartHack2026/
+# The repo is private but the Pages site is public. Nothing else is uploaded.
+name: Publish pitch deck
+
+on:
+  push:
+    branches: [master]
+    paths: [pitch.html, .github/workflows/pitch.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir site && cp pitch.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

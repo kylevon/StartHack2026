@@ -17,6 +17,8 @@ On the Soony case it found that the launch plan marked parts "ok" that were not:
 
 Code, architecture and configuration: [`asklio/faro/README.md`](asklio/faro/README.md).
 
+**Pitch deck:** [present it live](https://kylevon.github.io/StartHack2026/) (arrow keys or click to advance, `F` fullscreen, `N` notes), or [read the slides with notes](pitch/README.md). The live page is public and is republished whenever [`pitch.html`](pitch.html) changes on master.
+
 ## Run it
 
 ```sh
@@ -40,5 +42,6 @@ Tests: `cd asklio/faro && uv run pytest`.
 | `asklio/explorer/` | The earlier reconciliation app |
 | `asklio/data/` | Data sync notes and the changelog of each data drop |
 | `asklio/notes/` | Data findings and the rules for the team mailbox |
-| `results/` | Log export and chart data for the pitch |
+| `pitch.html`, `pitch/` | The pitch deck, and pictures of it for reading on GitHub (`python3 scripts/render_pitch.py` remakes them) |
+| `results/` | Chart data for the pitch |
 | `CLAUDE.md` | Start here if you are a coding agent |

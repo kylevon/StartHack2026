@@ -454,7 +454,7 @@ async def test_long_history_entries_get_a_cached_one_line_summary(folder, tmp_pa
     assert len(calls) == 1
 
 
-async def test_auto_mode_carries_out_only_what_the_agent_marked_routine(folder, tmp_path):
+async def test_auto_mode_carries_out_everything_proposed(folder, tmp_path):
     sent = []
 
     async def send(approval):
@@ -475,15 +475,20 @@ async def test_auto_mode_carries_out_only_what_the_agent_marked_routine(folder, 
 
     order = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Place the call-off", "r", needs_human=True, human_reason="Commits EUR 16,800.")
     routine = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Chase the answer", "r", needs_human=False, human_reason="A reminder.")
-    await until(lambda: routine.status == "approved")
-    assert order.status == "pending" and sent == ["A-1", "A-3"]  # the order still waits for a person
+    await until(lambda: routine.status == "approved" and order.status == "approved")
+    assert sorted(sent) == ["A-1", "A-2", "A-3"] and order.auto  # what the agent marked as needing a person goes out too: the team accepted that
+    assert "Auto mode is on. Everything you propose is carried out" in hub.directives()
+    hub.update_settings(aggressive=True)
+    hard = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Final notice", "r", needs_human=True, human_reason="Threatens the relationship.")
+    await until(lambda: hard.status == "approved")
+    assert hard.auto and "and the hard emails of aggressive mode" in hub.directives()  # aggressive mode does not hold auto mode back
 
     again = Hub(folder, tmp_path / "state")
     assert again.auto and again.approvals["A-2"].needs_human  # the switch survives a restart
     hub.set_auto(False)
     late = hub.propose("send_email", {"to": ["a@x.example"]}, issue.id, "Another question", "r", needs_human=False, human_reason="q")
     await asyncio.sleep(0.05)
-    assert late.status == "pending"
+    assert late.status == "pending" and "Auto mode is off" in hub.directives()
 
 
 def test_proposals_from_before_auto_mode_stay_with_a_person(folder, tmp_path):
