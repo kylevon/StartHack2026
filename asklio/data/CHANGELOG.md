@@ -4,21 +4,6 @@ One entry per portal snapshot, newest first. The data itself is not in git: get 
 
 <!-- new entries go below this line -->
 
-<<<<<<< HEAD
-## 2026-11-21 22:26 snapshot
-
-Snapshot `cde498bb9627acef`, 332 files (19 added since the 16:09 snapshot, 0 changed, 0 removed).
-
-The sync script reported "332 added, 303 removed" on this machine. That was the local folder still holding Friday's snapshot one directory too deep (`soony-data/soony-data/`), not a change at the portal. The list below is the real difference to the 16:09 snapshot.
-
-### Added
-- `soony/erp/stock_update_2026-11-21.xlsx`
-- `soony/erp/goods_receipts_update.csv`
-- `soony/news/2026-11-21_export_controls.json`
-- `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
-- `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
-- `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
-=======
 ## 2026-11-22 09:17 snapshot
 
 Snapshot `323021578bfed75c`, 335 files (3 added, 0 changed, 0 removed).
@@ -51,14 +36,19 @@ Read on Sun 22 Nov, 09:25. Nothing here changes today's launch. All three files 
 **Watch out**
 - `explorer/build.py` reads none of the three new formats (this PO export, `goods_receipts_update.csv`, `stock_update_*.xlsx`).
 
-## 2026-11-21 21:46 snapshot
+## 2026-11-21 22:26 snapshot
 
-Snapshot `cde498bb9627acef`, 332 files (14 added, 0 changed, 0 removed).
+Snapshot `cde498bb9627acef`, 332 files (19 added since the 16:09 snapshot, 0 changed, 0 removed).
+
+The sync script reported "332 added, 303 removed" on this machine. That was the local folder still holding Friday's snapshot one directory too deep (`soony-data/soony-data/`), not a change at the portal. The list below is the real difference to the 16:09 snapshot.
 
 ### Added
-- `soony/erp/goods_receipts_update.csv`
 - `soony/erp/stock_update_2026-11-21.xlsx`
->>>>>>> 64db361 (Add weekend results: supplier status, three data-drop reviews, Faro log, chart data)
+- `soony/erp/goods_receipts_update.csv`
+- `soony/news/2026-11-21_export_controls.json`
+- `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
+- `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
+- `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
 - `soony/receiving/DC-HAM/20260903_DN-260831-382.jpg`
 - `soony/receiving/DC-HAM/20260903_WZ-260902-594.jpg`
 - `soony/receiving/DC-HAM/20260904_SN-260730-216.jpg`
@@ -68,7 +58,6 @@ Snapshot `cde498bb9627acef`, 332 files (14 added, 0 changed, 0 removed).
 - `soony/receiving/DC-HAM/20261110_SN-261007-130.jpg`
 - `soony/receiving/DC-HAM/20261111_DN-261106-613.png`
 - `soony/receiving/DC-HAM/20261113_WZ-261110-805.jpg`
-<<<<<<< HEAD
 - `suppliers/SUP-0018_Pune_Diecast_Works/profile.json`
 - `suppliers/SUP-0029_Guangzhou_PackRight/profile.json`
 - `suppliers/SUP-0029_Guangzhou_PackRight/components_delta.csv`
@@ -96,7 +85,25 @@ Read on Sat 21 Nov, 22:30. Stock figures are book stock, not counted.
 **Pune's qualification has lapsed** (`SUP-0018 profile.json`): conditional release valid until 2026-10-30, not extended, status "watch". The failed statue lot came from a supplier with no valid release, which matters for the concession decision.
 
 **Nine older delivery-note scans** (September to mid-November) were added to `receiving/DC-HAM/`. Not reviewed yet.
-=======
+
+## 2026-11-21 21:46 snapshot
+
+> Same snapshot (`cde498bb9627acef`) as the 22:26 entry above, installed and read on another machine at 21:46. Both reviews are kept.
+
+Snapshot `cde498bb9627acef`, 332 files (14 added, 0 changed, 0 removed).
+
+### Added
+- `soony/erp/goods_receipts_update.csv`
+- `soony/erp/stock_update_2026-11-21.xlsx`
+- `soony/receiving/DC-HAM/20260903_DN-260831-382.jpg`
+- `soony/receiving/DC-HAM/20260903_WZ-260902-594.jpg`
+- `soony/receiving/DC-HAM/20260904_SN-260730-216.jpg`
+- `soony/receiving/DC-HAM/20260914_SN-260810-719.png`
+- `soony/receiving/DC-HAM/20261009_WZ-261007-399.png`
+- `soony/receiving/DC-HAM/20261106_DN-261102-986.jpg`
+- `soony/receiving/DC-HAM/20261110_SN-261007-130.jpg`
+- `soony/receiving/DC-HAM/20261111_DN-261106-613.png`
+- `soony/receiving/DC-HAM/20261113_WZ-261110-805.jpg`
 - `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
 - `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
 - `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
@@ -156,7 +163,6 @@ Read on Sat 21 Nov, 18:30. No effect on Sunday's launch; this is a supply risk f
 **Pune Diecast profile confirms the lapsed release.** Conditional qualification valid until 2026-10-30, `extendedBy: null`, PPAP review by Supplier Quality still open. The supplier's order confirmations claim serial approval.
 
 **Sleeves, from re-reading the existing data (not this drop).** ERP stock is kept per goods-receipt batch: of the 186,000 sleeves, 122,000 are two Karton Nowak batches (GR 5000413040, 5000413060) and 64,000 are one PackRight batch (GR 5000413064). Nowak's confirmations have said "printed to rev C" since August; PackRight's later container is rev B. So probably 122,000 are rev C and 64,000 rev B. This is inferred from the suppliers' paperwork, not from a count, and has to be confirmed at the DC.
->>>>>>> 64db361 (Add weekend results: supplier status, three data-drop reviews, Faro log, chart data)
 
 ## 2026-11-21 16:09 snapshot
 
