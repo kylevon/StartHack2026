@@ -78,15 +78,6 @@ Systems of record are not configured. Faro lists every system the agent has prop
 
 The only connector, SAP, is a stand-in: it accepts the posting and returns a reference, but no SAP is behind it. The interface does not say this, so say it when you demo it.
 
-## Not done yet
-
-- **Only email is connected.** An approved `update_record` goes into the corrections ledger and an approved `edit_file` is recorded; neither changes the system or the file. The agent is told so.
-- **Replies inside a thread are untested against the live mailbox.** New messages and reading are; the reply call follows AgentMail's documentation.
-- **Files come from the local folder only.** To follow the Lio portal instead, sync its `GET /api/v1/files` into the folder, or replace `files.snapshot` and the reads.
-- **The agent's working memory is not saved.** Everything else survives a restart (see System of record). After one, the agent is told which issues, proposals and corrections exist, hears only about files and mail that changed while it was down, and re-reads what it needs.
-- **Claude's compaction is untested here.** It is configured as documented but has not run against the live API yet. The local summarisation path is covered by a test.
-- **Word and PowerPoint files are not opened.**
-
 ## Tests
 
 ```sh
