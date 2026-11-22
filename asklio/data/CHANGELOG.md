@@ -4,6 +4,7 @@ One entry per portal snapshot, newest first. The data itself is not in git: get 
 
 <!-- new entries go below this line -->
 
+<<<<<<< HEAD
 ## 2026-11-21 22:26 snapshot
 
 Snapshot `cde498bb9627acef`, 332 files (19 added since the 16:09 snapshot, 0 changed, 0 removed).
@@ -17,6 +18,47 @@ The sync script reported "332 added, 303 removed" on this machine. That was the 
 - `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
 - `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
 - `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
+=======
+## 2026-11-22 09:17 snapshot
+
+Snapshot `323021578bfed75c`, 335 files (3 added, 0 changed, 0 removed).
+
+### Added
+- `soony/erp/po_export_2026-11-22.csv`
+- `suppliers/SUP-0010_Hwaseong_Memory/contracts/SUP-0010_LTA_Amendment_3_redline.pdf`
+- `suppliers/SUP-0019_Dongguan_Precision_Housings/order_confirmations/revised_schedule_W47.csv`
+
+### What it means
+Read on Sun 22 Nov, 09:25. Nothing here changes today's launch. All three files are about what happens after it, and two of them need a decision this week.
+
+**Hwaseong's contract redline contains a trap** (`SUP-0010_LTA_Amendment_3_redline.pdf`, supplier draft of 22 Nov, "supersedes Soony draft v2"):
+- New §4, which Soony's Category Lead notes was "not discussed": the late-delivery clause drops from 2 % per week capped at 10 % to 0.5 % capped at 5 %, and **on signature all of Soony's late-delivery claims for earlier deliveries are settled and waived**. That would wipe out the claim for the 20,000 game cards notified on 21 Nov.
+- §2: today's prices (USD 9.80 and 5.40) continue only if the amendment is signed by 15 Dec; otherwise +8 % from 1 Jan (10.58 and 5.83).
+- §5: air freight becomes FCA Incheon and "Supplier is not liable for capacity decisions of carriers", which is exactly what happened this weekend.
+- §3: capacity reserved for 1.2 million cards in the first half of 2027.
+- Hwaseong asked three times by email this weekend to sign "Amendment 3" quickly. Do not sign this version. Told Hwaseong on 22 Nov that §4 and the carrier sentence in §5 are not agreed.
+
+**Dongguan has pushed every open order out by 10 days** (`revised_schedule_W47.csv`): 19 lines, statues, game cases and steel cases, "capacity re-planning Q4", from mid-December into February. The new PO export already carries the new dates. The contract (§7) penalises late delivery at 0.5 % per week; a unilateral reschedule is not a contract right. Objected by email on 22 Nov.
+
+**New PO export** (`po_export_2026-11-22.csv`): open orders only, 76 lines, in a third format (German headers, semicolons, cp1252, dates as DD.MM.YYYY, decimal commas, positions 10/20/30 where the older file has 1/2/3). Compared with `purchase_orders_2025H2-2026.csv`:
+- 22 confirmed dates changed: the 19 Dongguan lines (+10 days) and 3 PackRight Collector's-box lines (+6 weeks, the magnet notice).
+- PO 4500318735 line 2 (Hwaseong, 48,000 game cards) is now `partially_delivered`.
+- Three lines that were open are gone because they were received on 21 Nov.
+- Buyer remarks worth acting on: "AB fehlt" (no order confirmation) on the 350,000 game cases at the port and on two other lines; "Lieferant mahnen" (chase supplier) on Boise's 36,000 game cards and a PackRight sleeve line; "Preis prüfen" on PackRight sleeves at CNY 0.4143 against a contract price of 0.3984 that is "fixed for the calendar year".
+
+**PackRight's open sleeve orders will arrive in the wrong revision unless changed.** PackRight prints to the revision in Soony's component master at the PO date, and that was rev B until 21 Nov. Open sleeve lines: 4500318752 (145,000, at sea, rev B per packing list), 4500318765 (125,000, due 14 Dec), 4500318786 (115,000, due 11 Jan), plus 4500318774 booked to sail on 23 Nov. Asked PackRight on 22 Nov to hold anything not yet shipped and to print everything not yet printed to rev C.
+
+**Watch out**
+- `explorer/build.py` reads none of the three new formats (this PO export, `goods_receipts_update.csv`, `stock_update_*.xlsx`).
+
+## 2026-11-21 21:46 snapshot
+
+Snapshot `cde498bb9627acef`, 332 files (14 added, 0 changed, 0 removed).
+
+### Added
+- `soony/erp/goods_receipts_update.csv`
+- `soony/erp/stock_update_2026-11-21.xlsx`
+>>>>>>> 64db361 (Add weekend results: supplier status, three data-drop reviews, Faro log, chart data)
 - `soony/receiving/DC-HAM/20260903_DN-260831-382.jpg`
 - `soony/receiving/DC-HAM/20260903_WZ-260902-594.jpg`
 - `soony/receiving/DC-HAM/20260904_SN-260730-216.jpg`
@@ -26,6 +68,7 @@ The sync script reported "332 added, 303 removed" on this machine. That was the 
 - `soony/receiving/DC-HAM/20261110_SN-261007-130.jpg`
 - `soony/receiving/DC-HAM/20261111_DN-261106-613.png`
 - `soony/receiving/DC-HAM/20261113_WZ-261110-805.jpg`
+<<<<<<< HEAD
 - `suppliers/SUP-0018_Pune_Diecast_Works/profile.json`
 - `suppliers/SUP-0029_Guangzhou_PackRight/profile.json`
 - `suppliers/SUP-0029_Guangzhou_PackRight/components_delta.csv`
@@ -53,6 +96,67 @@ Read on Sat 21 Nov, 22:30. Stock figures are book stock, not counted.
 **Pune's qualification has lapsed** (`SUP-0018 profile.json`): conditional release valid until 2026-10-30, not extended, status "watch". The failed statue lot came from a supplier with no valid release, which matters for the concession decision.
 
 **Nine older delivery-note scans** (September to mid-November) were added to `receiving/DC-HAM/`. Not reviewed yet.
+=======
+- `soony/receiving/DC-HAM/20261121_DN-261119-197.jpg`
+- `soony/receiving/DC-HAM/20261121_DN-261120-726.jpg`
+- `soony/receiving/DC-HAM/20261121_WZ-261120-732.jpg`
+
+### What it means
+Read on Sat 21 Nov, 21:50. This is the first real stock since Friday: book stock after the late shift, plus today's receipts. All 12 new scans were read with Gemini.
+
+**Progress** (`stock_update_2026-11-21.xlsx`, 20:50): Standard 602,000 packed, **38,000 to go** (6.3 h at 6,000/h). Collector's 60,300 packed, **11,700 to go** (13 h at 900/h, with 14 h of shift on Sunday: one hour of slack).
+
+**What is left for Sunday, part by part** (book stock, corrected for what we know is not usable):
+
+| Part | Needed | Usable | Gap | Runs out Sunday |
+|---|---|---|---|---|
+| Game cards CMP-GAM-001 | 49,700 | 42,900 | **6,800 short** (comes off Standard) | after about 31,200 Standard copies |
+| Game cases CMP-GAM-003 | 38,000 | 6,000 | **32,000 short** | 07:00, one hour into the shift |
+| Sleeves CMP-GAM-004 rev C | 38,000 | about 48,000 | none, see below | |
+| Art books CMP-GAM-008 | 11,700 | 5,800 (77,800 booked minus the 72,000 that do not exist) | **5,900 short** | about 12:25 |
+| Statues CMP-GAM-010 | 11,700 | 8,300 (13,900 minus the rejected 5,600) | **3,400 short** | about 15:15 |
+| Collector's box CMP-GAM-007 | 11,700 | 14,000 | none (2,300 spare) | |
+| Steel case, poster, leaflet | | | none | |
+
+**Game cards: the 28,000 from Hwaseong are in the building.** GR 5000413070, delivery note DN-261120-726, quantity matches. The Frankfurt truck we had asked Hwaseong's forwarder to book was cancelled by email at 21:48. The balance of 20,000 still arrives 24 Nov.
+
+**Sleeves: the receiving error has happened again.** Nowak's 20,000 rev C sleeves arrived (GR 5000413071), but one pallet labelled CMP-GAM-004 holds 4,000 Grand Heist 5 sleeves. The scan carries a handwritten "1 Pal. = GH5 Sleeves!", and receiving still booked 20,000 "per delivery note". Real rev C received: 16,000.
+- Usable rev C, if today's 90,000 Standard copies were packed from the two Nowak batches: 122,000 − 90,000 + 16,000 = about 48,000, against 38,000 needed.
+- If any of today's copies were packed from the PackRight batch (GR 5000413064, rev B, confirmed by PackRight), those copies carry a blocked sleeve and may not ship. The data does not say which batch was used. To check at the DC.
+- Nowak confirmed the packing error at 21:52 and will send 4,000 rev C on its next truck at no express charge.
+
+**Grand Heist 5 parts:** Boise's 10,500 game cards CMP-GAM-002 arrived (GRs 5000413067/68). Not relevant for the launch.
+
+**Older scans (9):** all match their goods receipts. Among them WZ-261110-805, one of the two Nowak sleeve batches that Nowak confirmed as rev C.
+
+**Watch out**
+- `goods_receipts_update.csv` and `stock_update_2026-11-21.xlsx` are new files next to the old exports, like the master-data deltas. `explorer/build.py` reads only `goods_receipts.csv` and `stock_snapshot.csv`, so the explorer still shows Friday's stock and does not know about today's four receipts.
+- The art-book stock in this file (77,800) still contains the 72,000 that were never delivered. Nowak confirmed 8,000 in writing.
+
+## 2026-11-21 18:06 snapshot
+
+Snapshot `595614300a5b0101`, 318 files (5 added, 0 changed, 0 removed).
+
+### Added
+- `soony/news/2026-11-21_export_controls.json`
+- `suppliers/SUP-0018_Pune_Diecast_Works/profile.json`
+- `suppliers/SUP-0029_Guangzhou_PackRight/components_delta.csv`
+- `suppliers/SUP-0029_Guangzhou_PackRight/notices/Supply_notice_export_licence_2026-11-21.pdf`
+- `suppliers/SUP-0029_Guangzhou_PackRight/profile.json`
+
+### What it means
+Read on Sat 21 Nov, 18:30. No effect on Sunday's launch; this is a supply risk for Collector's Editions made after it.
+
+**Magnets: China's export licensing stops PackRight's magnet supplier.** News items NEWS-2026-1121-04/05 and PackRight's supply notice: Jiangxi RareMag (Ganzhou) cannot ship magnet RM-N42-D0401 until it has a licence, expected to take four to eight weeks.
+- PackRight holds magnets for the Collector's boxes already confirmed for November. Confirmed dates for box PR-RB-2207 (CMP-GAM-007) after 1 Dec move out by 6 weeks; `components_delta.csv` puts the lead time at 63 → 105 days.
+- CMP-MAG-005 has no second source on file. PackRight offers to sample other closures (ferrite magnet, ribbon) within 10 days.
+- PackRight's vendor master status is now "at risk", risk owner P. Winter.
+- The first review called the magnets a false alarm. That still holds for the launch (they are fitted by the supplier, not stocked), but the part is now a real constraint on Collector's boxes from December.
+
+**Pune Diecast profile confirms the lapsed release.** Conditional qualification valid until 2026-10-30, `extendedBy: null`, PPAP review by Supplier Quality still open. The supplier's order confirmations claim serial approval.
+
+**Sleeves, from re-reading the existing data (not this drop).** ERP stock is kept per goods-receipt batch: of the 186,000 sleeves, 122,000 are two Karton Nowak batches (GR 5000413040, 5000413060) and 64,000 are one PackRight batch (GR 5000413064). Nowak's confirmations have said "printed to rev C" since August; PackRight's later container is rev B. So probably 122,000 are rev C and 64,000 rev B. This is inferred from the suppliers' paperwork, not from a count, and has to be confirmed at the DC.
+>>>>>>> 64db361 (Add weekend results: supplier status, three data-drop reviews, Faro log, chart data)
 
 ## 2026-11-21 16:09 snapshot
 

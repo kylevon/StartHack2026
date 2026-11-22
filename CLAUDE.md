@@ -11,6 +11,7 @@ Team repo for the Soony case. The work is under `asklio/`. Task description: `as
 | Send or read email as the team | `asklio/notes/email.md` |
 | Run the reconciliation app | `asklio/explorer/README.md` |
 | Findings from the first data review | `asklio/notes/data-findings.md` |
+| What the scans and contracts say | `asklio/notes/scan-review.md` |
 
 ## Rules
 
