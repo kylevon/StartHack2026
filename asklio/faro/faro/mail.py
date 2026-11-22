@@ -183,9 +183,39 @@ def translator(model, cache):
     return translate
 
 
-async def thread_view(hub: Hub, mailbox: Mailbox, thread_id: str) -> dict:
+async def newest_by_thread(mailbox: Mailbox) -> tuple[list[dict], dict[str, str]]:
+    """The mailbox's list of conversations, and for each the time of its newest message: one request that says what has changed."""
+    threads = await mailbox.threads()
+    return threads, {t["thread_id"]: t.get("timestamp") or "" for t in threads if t.get("thread_id")}
+
+
+async def stored_thread(hub: Hub, mailbox: Mailbox, thread_id: str, newest: dict[str, str] | None = None) -> dict:
+    """A conversation, from Faro's own copy when the mailbox says nothing was added to it since, otherwise fetched and kept.
+
+    The mailbox stays the authority: an email never changes once it exists, so a copy is only ever out of date by being short,
+    and `newest` (from `newest_by_thread`) tells us when it is. Without `newest` the conversation is fetched. If the mailbox
+    cannot be reached, the copy is better than nothing and is returned as it is."""
+    kept_threads = hub.store.cache("threads")
+    kept = kept_threads.get(thread_id)
+    stamp = (newest or {}).get(thread_id, "")
+    if kept and stamp and kept["stamp"] == stamp:
+        return kept["thread"]
+    try:
+        data = await mailbox.thread(thread_id)
+    except Exception:
+        if kept:
+            return kept["thread"]
+        raise
+    messages = [{"message_id": m.get("message_id"), "from": m.get("from") or "", "to": m.get("to") or [], "timestamp": m.get("timestamp") or "",
+                 "labels": m.get("labels", []), "text": _body(m)} for m in data.get("messages", [])]
+    thread = {"subject": data.get("subject") or "", "messages": messages}
+    kept_threads[thread_id] = {"stamp": stamp or max((m["timestamp"] for m in messages), default=""), "thread": thread}
+    return thread
+
+
+async def thread_view(hub: Hub, mailbox: Mailbox, thread_id: str, newest: dict[str, str] | None = None) -> dict:
     """One conversation as the mailbox has it, each message with its English."""
-    data = await mailbox.thread(thread_id)
+    data = await stored_thread(hub, mailbox, thread_id, newest)
 
     async def one(m: dict) -> dict:
         text = _body(m)
@@ -279,11 +309,21 @@ async def issue_history(hub: Hub, issue) -> dict:
 
     await asyncio.gather(*(shorten(entry) for entry in entries))
     if hub.mailbox is not None:
-        for thread_id in issue.thread_ids:
+        try:  # one request tells which conversations have something new; only those are fetched again
+            listed, newest = await newest_by_thread(hub.mailbox)
+        except Exception as err:
+            listed, newest = [], {}
+            problem = f"The mailbox could not be reached ({err or type(err).__name__}); emails are shown from Faro's saved copy."
+
+        async def view_of(thread_id: str):
             try:
-                view = await thread_view(hub, hub.mailbox, thread_id)
+                return await thread_view(hub, hub.mailbox, thread_id, newest)
             except Exception as err:
-                problem = f"The mailbox could not be read: {err or type(err).__name__}"
+                return err
+
+        for view in await asyncio.gather(*(view_of(thread_id) for thread_id in issue.thread_ids)):
+            if isinstance(view, Exception):
+                problem = problem or f"The mailbox could not be read: {view or type(view).__name__}"
                 continue
             for m in view["messages"]:
                 # the message's own "ts" is an ISO string; the timeline sorts on seconds, so ours must win
@@ -291,20 +331,14 @@ async def issue_history(hub: Hub, issue) -> dict:
                 people.update(_addresses(m["from"], *m["to"]) - {hub.mailbox.inbox.lower()})
         # Mail keeps flowing while the agent is not there to file it. A newer conversation with the same people most likely belongs
         # here too, so it is shown, marked as not yet filed, until the agent links it or files it elsewhere.
-        if people:
-            try:
-                others = [t for t in await hub.mailbox.threads() if t.get("thread_id") not in issue.thread_ids
-                          and epoch(t.get("timestamp") or "") > issue.created
-                          and _addresses(*(t.get("senders") or []), *(t.get("recipients") or [])) & people]
-            except Exception as err:
-                problem, others = f"The mailbox could not be read: {err or type(err).__name__}", []
-            for t in sorted(others, key=lambda t: t.get("timestamp") or "", reverse=True)[:MORE_THREADS]:
-                try:
-                    view = await thread_view(hub, hub.mailbox, t["thread_id"])
-                except Exception:
-                    continue
-                for m in view["messages"]:
-                    entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"], "unfiled": True})
+        others = [t for t in listed if t.get("thread_id") not in issue.thread_ids and epoch(t.get("timestamp") or "") > issue.created
+                  and _addresses(*(t.get("senders") or []), *(t.get("recipients") or [])) & people]
+        others = sorted(others, key=lambda t: t.get("timestamp") or "", reverse=True)[:MORE_THREADS]
+        for view in await asyncio.gather(*(view_of(t["thread_id"]) for t in others)):
+            if isinstance(view, Exception):
+                continue
+            for m in view["messages"]:
+                entries.append({**m, "sent_at": m["ts"], "ts": epoch(m["ts"]), "kind": "mail_" + m["direction"], "subject": view["subject"], "unfiled": True})
     return {"entries": sorted(entries, key=lambda e: e["ts"]), "problem": problem}
 
 
@@ -323,9 +357,15 @@ async def scenario_history(hub: Hub, scenario: dict) -> dict:
             threads.append(a.thread_id)
     if scenario["status"] != "watching" and scenario.get("settled"):
         entries.append({"ts": scenario["settled"], "kind": "scenario_" + scenario["status"], "text": scenario["what"] + (f" {scenario['note']}" if scenario.get("note") else ""), "ref": scenario["id"]})
+    newest: dict[str, str] = {}
+    if threads and hub.mailbox is not None:
+        try:
+            newest = (await newest_by_thread(hub.mailbox))[1]
+        except Exception:
+            pass  # the copies are used where there are any
     for thread_id in threads if hub.mailbox is not None else []:
         try:
-            view = await thread_view(hub, hub.mailbox, thread_id)
+            view = await thread_view(hub, hub.mailbox, thread_id, newest)
         except Exception as err:
             problem = f"The mailbox could not be read: {err or type(err).__name__}"
             continue

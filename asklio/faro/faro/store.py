@@ -127,15 +127,15 @@ class Cache:
 
     def __init__(self, db, kind: str):
         self._db, self._kind = db, kind
-        self._known: dict = {}  # what this process has already looked up or written
+        self._known: dict | None = None  # everything of this kind, read in one go at first use; one Faro runs per database, so nobody else adds to it
+
+    def _all(self) -> dict:
+        if self._known is None:
+            self._known = {key: json.loads(value) for key, value in self._db.read("SELECT key, value FROM cache WHERE kind = ?", (self._kind,))}
+        return self._known
 
     def get(self, key: str, default=None):
-        if key not in self._known:
-            rows = self._db.read("SELECT value FROM cache WHERE kind = ? AND key = ?", (self._kind, key))
-            if not rows:
-                return default
-            self._known[key] = json.loads(rows[0][0])
-        return self._known[key]
+        return self._all().get(key, default)
 
     def __contains__(self, key: str) -> bool:
         return self.get(key) is not None
@@ -144,7 +144,7 @@ class Cache:
         return self.get(key)
 
     def __setitem__(self, key: str, value) -> None:
-        self._known[key] = value
+        self._all()[key] = value
         self._db.write("INSERT INTO cache VALUES (?, ?, ?) ON CONFLICT (kind, key) DO UPDATE SET value = excluded.value", (self._kind, key, json.dumps(value, ensure_ascii=False)))
 
 

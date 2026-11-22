@@ -48,6 +48,8 @@ Point `FARO_DATA_DIR` at any folder of documents. The default is the hackathon d
 
 ## System of record
 
+Emails stay in the mailbox, which is the authority on them. Faro keeps a copy of each conversation it has shown (cache kind `threads`) and, when a history is opened, asks the mailbox once which conversations have something new and fetches only those. If the mailbox cannot be reached, the history is shown from the copy and says so.
+
 Everything Faro itself knows and decided is in one database (`store.py`): a local SQLite file, `.faro/faro.db`, or a hosted Postgres when `FARO_DATABASE_URL` is set. On its first start against an empty hosted database Faro copies the local record across. With Postgres the tables live in their own `faro` schema, writes are queued to a background thread so the network never stalls the agent, and only one Faro should run per database, because the running instance assigns issue, approval and event numbers.
 
 It holds:

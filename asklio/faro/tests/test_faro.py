@@ -424,7 +424,12 @@ async def test_history_merges_faro_entries_and_mail_in_time_order(folder, tmp_pa
     broken = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(500, text="down")))
     hub.mailbox = mail.Mailbox("team@agentmail.to", "k", broken)
     degraded = await mail.issue_history(hub, issue)
-    assert [e["kind"] for e in degraded["entries"]] == ["found", "note"] and "could not be read" in degraded["problem"]
+    # the mailbox is down: the emails come from the copy kept at the last read, and the page says so
+    assert [e["kind"] for e in degraded["entries"]] == ["found", "mail_sent", "note", "mail_received"] and "saved copy" in degraded["problem"]
+    never = hub.open_issue("Never read", "info", "s", [])
+    hub.update_issue(never.id, "Linked.", thread_id="t-unread")
+    unread = await mail.issue_history(hub, never)
+    assert not any(e["kind"].startswith("mail_") for e in unread["entries"]) and unread["problem"]  # no copy: only Faro's own entries
 
 
 async def test_long_history_entries_get_a_cached_one_line_summary(folder, tmp_path):
@@ -1036,3 +1041,48 @@ async def test_without_a_model_saved_translations_summaries_and_highlights_are_s
     marked = {key("Call Raj by 22:00."): "Call **Raj** by **22:00**."}
     emphasize = mail.emphasizer(None, marked)
     assert await emphasize("Call Raj by 22:00.") == "Call **Raj** by **22:00**." and await emphasize("New text.") == "New text." and len(marked) == 1
+
+
+async def test_conversations_are_kept_and_only_fetched_again_when_the_mailbox_has_something_new(folder, tmp_path):
+    import httpx
+
+    from faro import mail
+
+    def msg(mid, thread, direction, when, text):
+        return {"message_id": mid, "thread_id": thread, "labels": [direction], "timestamp": when, "text": text,
+                "from": "Team <team@agentmail.to>" if direction == "sent" else "A <a@supplier.example>", "to": ["a@supplier.example"] if direction == "sent" else ["team@agentmail.to"]}
+
+    threads = {"t1": [msg("<1>", "t1", "sent", "2099-01-01T10:00:00Z", "How many?")], "t2": [msg("<2>", "t2", "sent", "2099-01-01T11:00:00Z", "When?")]}
+    calls, down = [], []
+
+    def handle(request):
+        if down:
+            raise httpx.ConnectError("no route to the mailbox")
+        calls.append(request.url.path.rsplit("/", 1)[-1])
+        if request.url.path.endswith("/threads"):
+            return httpx.Response(200, json={"threads": [{"thread_id": k, "timestamp": v[-1]["timestamp"], "senders": [], "recipients": []} for k, v in threads.items()]})
+        thread_id = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json={"thread_id": thread_id, "subject": thread_id, "messages": threads[thread_id]})
+
+    hub = Hub(folder, tmp_path / "state")
+    hub.mailbox = mail.Mailbox("team@agentmail.to", "k", httpx.AsyncClient(transport=httpx.MockTransport(handle)))
+    issue = hub.open_issue("Art books short", "blocker", "s", [])
+    hub.update_issue("I-1", "Linked.", thread_id="t1")
+    hub.update_issue("I-1", "Linked.", thread_id="t2")
+    texts = lambda result: [e["text"] for e in result["entries"] if e["kind"].startswith("mail_")]
+
+    assert texts(await mail.issue_history(hub, issue)) == ["How many?", "When?"] and sorted(calls) == ["t1", "t2", "threads"]
+    calls.clear()
+    assert texts(await mail.issue_history(hub, issue)) == ["How many?", "When?"] and calls == ["threads"]  # nothing new: one request, no downloads
+
+    threads["t1"].append(msg("<3>", "t1", "received", "2099-01-01T12:00:00Z", "8000."))
+    calls.clear()
+    assert texts(await mail.issue_history(hub, issue)) == ["How many?", "When?", "8000."] and sorted(calls) == ["t1", "threads"]  # only the conversation that grew
+
+    hub.store.close()
+    again = Hub(folder, tmp_path / "state")  # the copy survives a restart, and a mailbox that cannot be reached
+    again.mailbox = hub.mailbox
+    down.append(True)
+    result = await mail.issue_history(again, again.issues["I-1"])
+    assert texts(result) == ["How many?", "When?", "8000."] and "saved copy" in result["problem"]
+    again.store.close()

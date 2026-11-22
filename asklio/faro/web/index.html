@@ -671,7 +671,7 @@ const WHAT = {
 // The timeline itself: the same for an issue and for something that could go wrong.
 function timeline(id) {
   if (!historyData || historyData.id !== id) return '<p class="cap">Reading the history and the mailbox…</p>';
-  return (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + ' The entries below are what Faro recorded itself.</p>' : '') +
+  return (historyData.problem ? '<p class="cap" style="color:var(--ink);font-weight:600">' + esc(historyData.problem) + '</p>' : '') +
     '<div class="timeline">' + [...historyData.entries].reverse().map((e) => {
       const [who, did, tone] = WHAT[e.kind] || ['', e.kind, 'agent'];
       const mail = e.kind.startsWith('mail_');
@@ -706,7 +706,7 @@ async function loadHistory() {
     const res = await fetch((look ? '/api/scenarios/' : '/api/issues/') + q(id) + '/history');
     data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'status ' + res.status);
-  } catch (err) { data = { entries: (issues.get(id) || { history: [] }).history, problem: 'The history could not be read: ' + err.message }; }
+  } catch (err) { data = { entries: (issues.get(id) || { history: [] }).history, problem: 'The history could not be read: ' + err.message + '. The entries below are what Faro recorded itself.' }; }
   if (id !== (view === 'look' ? lookSel : selected)) return;
   historyData = { id, ...data };
   if (view === 'history' || (view === 'look' && lookTab === 'history')) renderCenter(true);
